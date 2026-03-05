@@ -1,0 +1,45 @@
+# Explicit integrations instead of default_config, to exclude:
+# - go2rtc (no binary in dev container, causes default_config to fail entirely)
+# - radio_browser + homeassistant_alerts (pycares 5.x / aiodns 3.2 API mismatch causes DNS errors)
+frontend:
+config:
+history:
+logbook:
+recorder:
+automation:
+script:
+scene:
+person:
+zone:
+sun:
+input_boolean:
+input_button:
+input_datetime:
+input_number:
+input_select:
+input_text:
+counter:
+timer:
+schedule:
+tag:
+todo:
+energy:
+mobile_app:
+my:
+system_health:
+stream:
+webhook:
+network:
+ssdp:
+zeroconf:
+
+# https://www.home-assistant.io/integrations/homeassistant/
+homeassistant:
+  debug: true
+
+# https://www.home-assistant.io/integrations/logger/
+logger:
+  default: info
+  logs:
+    custom_components.haefele_connect_mesh: debug
+    homeassistant.components.mqtt: debug

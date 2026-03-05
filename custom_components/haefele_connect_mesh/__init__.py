@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import asyncio
+import json
+import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 import voluptuous as vol
@@ -14,61 +16,118 @@ from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
-from homeassistant.components.light import LightEntity
-from homeassistant.components.switch import SwitchEntity
-from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.components.sensor import SensorEntity
 
 from .api.client import HafeleClient
 from .coordinator import HafeleUpdateCoordinator
 from .exceptions import HafeleAPIError
+from .mqtt.coordinator import HafeleMQTTCoordinator
+from .mqtt.direct_client import DirectMQTTClient
+from .models.mqtt_device import MQTTDevice
+from .const import (
+    DOMAIN,
+    CONF_CONNECTION_TYPE,
+    CONNECTION_TYPE_CLOUD,
+    CONNECTION_TYPE_MQTT,
+    CONF_MQTT_TOPIC_PREFIX,
+    DEFAULT_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_USE_HA,
+    CONF_MQTT_BROKER,
+    CONF_MQTT_PORT,
+    CONF_MQTT_USERNAME,
+    CONF_MQTT_PASSWORD,
+    CONF_POLL_INTERVAL,
+    DEFAULT_POLL_INTERVAL,
+    CONF_POLLING_ENABLED,
+    DEFAULT_POLLING_ENABLED,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "haefele_connect_mesh"
 PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
-
-CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 PARALLEL_UPDATES = 0
 
 
+@dataclass
+class HafeleEntryData:
+    """Runtime data for a Häfele Connect Mesh config entry."""
+
+    coordinators: dict = field(default_factory=dict)
+    devices: list = field(default_factory=list)
+    gateways: list = field(default_factory=list)
+    client: object | None = None
+    network_id: str | None = None
+    prefix: str | None = None
+    direct_client: object | None = None
+
+
+type HafeleConfigEntry = ConfigEntry[HafeleEntryData]
+
+CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
+
+# Timeout (seconds) to wait for device discovery via MQTT
+_MQTT_DISCOVERY_TIMEOUT = 10
+
+
+async def _rotational_poll_loop(
+    coordinators: dict,
+    poll_interval: int,
+) -> None:
+    """Poll each MQTT device in rotation, spacing polls evenly within poll_interval."""
+    try:
+        while True:
+            snapshot = list(coordinators.values())
+            num = len(snapshot)
+            if num == 0:
+                await asyncio.sleep(poll_interval)
+                continue
+            sleep_between = max(2.0, poll_interval / num)
+            for coordinator in snapshot:
+                await coordinator.async_request_refresh()
+                await asyncio.sleep(sleep_between)
+    except asyncio.CancelledError:
+        pass
+
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the Häfele Connect Mesh component."""
-    hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Häfele Connect Mesh from a config entry."""
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    connection_type = entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_TYPE_CLOUD)
+
+    if connection_type == CONNECTION_TYPE_MQTT:
+        return await _async_setup_mqtt(hass, entry)
+
+    return await _async_setup_cloud(hass, entry)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+# ---------------------------------------------------------------------------
+# Cloud setup
+# ---------------------------------------------------------------------------
+
+async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up the integration using the Häfele cloud API."""
     try:
-        # Create API client with increased timeout
         session = async_get_clientsession(hass)
         client = HafeleClient(entry.data["api_token"], session, timeout=30)
-
-        # Get network ID from config entry
         network_id = entry.data["network_id"]
 
-        # Initialize data structure
-        hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN][entry.entry_id] = {
-            "client": client,
-            "gateways": [],
-            "coordinators": {},
-            "network_id": network_id,
-            "devices": [],
-        }
-
-        # Get gateways with timeout
         device_registry = dr.async_get(hass)
         try:
             async with asyncio.timeout(30):
                 gateways = await client.get_gateways()
                 network_gateways = [g for g in gateways if g.network_id == network_id]
-                
-                # Register gateways in device registry
+
                 for gateway in network_gateways:
                     device_registry.async_get_or_create(
                         config_entry_id=entry.entry_id,
@@ -79,34 +138,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         sw_version=gateway.firmware,
                         entry_type=dr.DeviceEntryType.SERVICE,
                     )
-                
-                hass.data[DOMAIN][entry.entry_id]["gateways"] = network_gateways
-
         except HafeleAPIError as err:
             if "401" in str(err):
                 _LOGGER.debug("Authentication failed, triggering reauth flow")
                 hass.async_create_task(
                     hass.config_entries.flow.async_init(
                         DOMAIN,
-                        context={
-                            "source": "reauth",
-                            "entry_id": entry.entry_id,
-                        },
+                        context={"source": "reauth", "entry_id": entry.entry_id},
                         data=entry.data,
                     )
                 )
                 return False
             raise ConfigEntryNotReady("Failed getting gateways") from err
 
-        # Get initial devices with timeout
+        entry.runtime_data = HafeleEntryData(
+            client=client,
+            gateways=network_gateways,
+            coordinators={},
+            network_id=network_id,
+            devices=[],
+        )
+
         try:
             async with asyncio.timeout(30):
                 devices = await client.get_devices_for_network(network_id)
-                hass.data[DOMAIN][entry.entry_id]["devices"] = devices
         except asyncio.TimeoutError as err:
             raise ConfigEntryNotReady("Timeout getting devices") from err
 
-        # Create coordinators with timeout
         for device in devices:
             try:
                 _LOGGER.debug(
@@ -114,37 +172,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     device.id,
                     device.type
                 )
-                
-                # Use longer timeout for switches
-                timeout = 30 if device.is_socket else 15
-                
-                coordinator = HafeleUpdateCoordinator(
-                    hass, 
-                    client, 
-                    device,
-                    entry
-                )
+                timeout = 30 if getattr(device, "is_socket", False) else 15
+                coordinator = HafeleUpdateCoordinator(hass, client, device, entry)
                 async with asyncio.timeout(timeout):
-                    try:
-                        # First try to get initial state
-                        status = await client.get_device_status(device.id)
-                        _LOGGER.debug(
-                            "Initial status for device %s: %s",
-                            device.id,
-                            status
-                        )
-                        
-                        await coordinator.async_config_entry_first_refresh()
-                    except Exception as status_err:
-                        _LOGGER.error(
-                            "Error getting initial status for device %s: %s",
-                            device.id,
-                            str(status_err)
-                        )
-                        raise
-                        
-                hass.data[DOMAIN][entry.entry_id]["coordinators"][device.id] = coordinator
-                
+                    await coordinator.async_config_entry_first_refresh()
+                entry.runtime_data.coordinators[device.id] = coordinator
+                entry.runtime_data.devices.append(device)
             except asyncio.TimeoutError:
                 _LOGGER.warning(
                     "Timeout initializing coordinator for device %s (type: %s), skipping",
@@ -160,22 +193,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
                 continue
 
-        # Add this before setting up platforms
-        if not any(hass.data[DOMAIN][entry.entry_id]["coordinators"].values()):
-            raise ConfigEntryNotReady(
-                "No devices could be initialized, will retry later"
-            )
+        if not entry.runtime_data.coordinators:
+            raise ConfigEntryNotReady("No devices could be initialized, will retry later")
 
-        # Set up platforms
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        
-        async def test_reauth(call):
-            """Test service to trigger reauth flow."""
-            entry_id = entry.entry_id
-            hass.async_create_task(
-                hass.config_entries.async_reload(entry_id)
-            )
-
         return True
 
     except HafeleAPIError as error:
@@ -184,72 +205,172 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.async_create_task(
                 hass.config_entries.flow.async_init(
                     DOMAIN,
-                    context={
-                        "source": "reauth",
-                        "entry_id": entry.entry_id,
-                    },
+                    context={"source": "reauth", "entry_id": entry.entry_id},
                     data=entry.data,
                 )
             )
             return False
-        _LOGGER.error("Failed to set up Häfele Connect Mesh: %s", str(error))
+        _LOGGER.error("Failed to set up Häfele Connect Mesh (cloud): %s", str(error))
         raise ConfigEntryNotReady(str(error)) from error
     except Exception as error:
-        _LOGGER.error("Failed to set up Häfele Connect Mesh: %s", str(error))
-        raise ConfigEntryNotReady(str(error)) from error
+        _LOGGER.error("Failed to set up Häfele Connect Mesh (cloud): %s", str(error))
+        raise ConfigEntryNotReady from error
 
+
+# ---------------------------------------------------------------------------
+# MQTT setup
+# ---------------------------------------------------------------------------
+
+async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up the integration using a local MQTT broker."""
+    import homeassistant.components.mqtt as ha_mqtt  # noqa: PLC0415 - avoids subpackage shadowing
+
+    use_ha = entry.data.get(CONF_MQTT_USE_HA, True)
+    direct_client: DirectMQTTClient | None = None
+
+    if use_ha:
+        try:
+            connected = ha_mqtt.is_connected(hass)
+        except KeyError:
+            raise ConfigEntryNotReady(
+                "HA MQTT integration is not configured. "
+                "Add the MQTT integration in Home Assistant first, or switch to direct broker mode."
+            )
+        if not connected:
+            raise ConfigEntryNotReady("HA MQTT client is not connected")
+    else:
+        broker = entry.data[CONF_MQTT_BROKER]
+        port = int(entry.data.get(CONF_MQTT_PORT, 1883))
+        username = entry.data.get(CONF_MQTT_USERNAME) or None
+        password = entry.data.get(CONF_MQTT_PASSWORD) or None
+
+        direct_client = DirectMQTTClient(broker, port, username, password)
+        try:
+            await direct_client.async_connect()
+        except ConnectionError as err:
+            raise ConfigEntryNotReady(str(err)) from err
+
+    prefix = entry.data.get(CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
+    polling_enabled = bool(
+        entry.options.get(CONF_POLLING_ENABLED, entry.data.get(CONF_POLLING_ENABLED, DEFAULT_POLLING_ENABLED))
+    )
+    poll_interval = int(
+        entry.options.get(CONF_POLL_INTERVAL, entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
+    )
+    discovery_topic = f"{prefix}/lights"
+
+    # Collect discovered devices from the discovery topic
+    discovered_devices: list[MQTTDevice] = []
+    discovery_event = asyncio.Event()
+
+    @callback
+    def _on_discovery(msg) -> None:
+        """Handle a discovery message listing all lights."""
+        try:
+            payload = json.loads(msg.payload)
+        except (json.JSONDecodeError, TypeError):
+            _LOGGER.warning("Invalid MQTT discovery payload: %s", msg.payload)
+            discovery_event.set()
+            return
+
+        if isinstance(payload, list):
+            for item in payload:
+                try:
+                    device = MQTTDevice(
+                        device_name=item["device_name"],
+                        device_addr=item["device_addr"],
+                        device_types=item.get("device_types", ["light"]),
+                    )
+                    discovered_devices.append(device)
+                except (KeyError, TypeError) as err:
+                    _LOGGER.warning("Skipping malformed device entry: %s", err)
+        elif isinstance(payload, dict):
+            # Single-device payload
+            try:
+                device = MQTTDevice(
+                    device_name=payload["device_name"],
+                    device_addr=payload["device_addr"],
+                    device_types=payload.get("device_types", ["light"]),
+                )
+                discovered_devices.append(device)
+            except (KeyError, TypeError) as err:
+                _LOGGER.warning("Skipping malformed device entry: %s", err)
+
+        discovery_event.set()
+
+    if direct_client:
+        unsubscribe_discovery = await direct_client.async_subscribe(
+            discovery_topic, _on_discovery
+        )
+    else:
+        unsubscribe_discovery = await ha_mqtt.async_subscribe(
+            hass, discovery_topic, _on_discovery, qos=0
+        )
+
+    # Wait for the gateway to respond with device list
+    try:
+        await asyncio.wait_for(
+            discovery_event.wait(), timeout=_MQTT_DISCOVERY_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        _LOGGER.warning(
+            "MQTT device discovery timed out after %ds on topic '%s'. "
+            "Proceeding with %d device(s) found so far.",
+            _MQTT_DISCOVERY_TIMEOUT,
+            discovery_topic,
+            len(discovered_devices),
+        )
+    finally:
+        unsubscribe_discovery()
+
+    # Build coordinators for each discovered device
+    coordinators: dict[str, HafeleMQTTCoordinator] = {}
+    for device in discovered_devices:
+        coordinator = HafeleMQTTCoordinator(hass, device, prefix, direct_client=direct_client)
+        await coordinator.async_setup()
+        coordinators[device.id] = coordinator
+
+    entry.runtime_data = HafeleEntryData(
+        coordinators=coordinators,
+        devices=discovered_devices,
+        gateways=[],
+        prefix=prefix,
+        direct_client=direct_client,
+    )
+
+    if polling_enabled and coordinators:
+        poll_task = hass.async_create_task(
+            _rotational_poll_loop(coordinators, poll_interval),
+            name="hafele_mqtt_rotational_poll",
+        )
+        entry.async_on_unload(poll_task.cancel)
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.info(
+        "Häfele Connect Mesh (MQTT) set up with %d device(s)", len(discovered_devices)
+    )
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Unload
+# ---------------------------------------------------------------------------
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    entry_data: HafeleEntryData = entry.runtime_data
+
+    # Cancel MQTT subscriptions / shut down cloud coordinators before unloading platforms
+    for coordinator in entry_data.coordinators.values():
+        if isinstance(coordinator, HafeleMQTTCoordinator):
+            await coordinator.async_unsubscribe()
+        else:
+            coordinator.async_shutdown()
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        # Cancel any pending tasks
-        for coordinator in hass.data[DOMAIN][entry.entry_id]["coordinators"].values():
-            coordinator.async_shutdown()
-        hass.data[DOMAIN].pop(entry.entry_id)
+        # Disconnect the direct MQTT client if one was created
+        if entry_data.direct_client:
+            await entry_data.direct_client.async_disconnect()
 
     return unload_ok
-
-
-# async def async_remove_config_entry_device(
-#     hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
-# ) -> bool:
-#     """Remove a device from the integration.
-#     
-#     This function is called when a user initiates device deletion from the UI.
-#     We need to:
-#     1. Find the device in our data structure
-#     2. Remove it from any coordinators
-#     3. Clean up any device-specific data
-#     """
-#     try:
-#         # Get the device ID from the device entry identifiers
-#         device_id = None
-#         for identifier in device_entry.identifiers:
-#             if identifier[0] == DOMAIN:
-#                 device_id = identifier[1]
-#                 break
-#                 
-#         if not device_id:
-#             return False
-# 
-#         # Get our integration data
-#         client = hass.data[DOMAIN][config_entry.entry_id]["client"]
-#         coordinators = hass.data[DOMAIN][config_entry.entry_id]["coordinators"]
-#         devices = hass.data[DOMAIN][config_entry.entry_id]["devices"]
-# 
-#         # Remove the coordinator for this device if it exists
-#         if device_id in coordinators:
-#             coordinator = coordinators.pop(device_id)
-#             # Cancel any pending updates
-#             coordinator.async_shutdown()
-# 
-#         # Remove the device from our devices list
-#         devices[:] = [d for d in devices if d.id != device_id]
-# 
-#         _LOGGER.info("Successfully removed device %s", device_id)
-#         return True
-# 
-#     except Exception as ex:
-#         _LOGGER.error("Error removing device %s: %s", device_entry.id, str(ex))
-#         return False

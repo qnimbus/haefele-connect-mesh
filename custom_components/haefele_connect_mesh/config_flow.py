@@ -13,8 +13,39 @@ from homeassistant.const import CONF_API_TOKEN
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
-from .const import DOMAIN, CONF_NETWORK_ID, CONF_SCAN_INTERVAL, CONF_NEW_DEVICES_CHECK_INTERVAL, CONF_DEVICE_DETAILS_UPDATE_INTERVAL, DEFAULT_SCAN_INTERVAL, DEFAULT_NEW_DEVICES_CHECK_INTERVAL, DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL
+from .const import (
+    DOMAIN,
+    CONF_NETWORK_ID,
+    CONF_CONNECTION_TYPE,
+    CONNECTION_TYPE_MQTT,
+    CONNECTION_TYPE_CLOUD,
+    CONF_MQTT_TOPIC_PREFIX,
+    DEFAULT_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_USE_HA,
+    CONF_MQTT_BROKER,
+    CONF_MQTT_PORT,
+    CONF_MQTT_USERNAME,
+    CONF_MQTT_PASSWORD,
+    DEFAULT_MQTT_PORT,
+    CONF_POLL_INTERVAL,
+    DEFAULT_POLL_INTERVAL,
+    MIN_POLL_INTERVAL,
+    CONF_POLLING_ENABLED,
+    DEFAULT_POLLING_ENABLED,
+)
 from .api.client import HafeleClient
 from .exceptions import HafeleAPIError
 
@@ -26,51 +57,176 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        """Return the options flow handler."""
+        return OptionsFlowHandler(config_entry)
+
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._api_token: str | None = None
         self._networks: list[dict] | None = None
+        self._mqtt_topic_prefix: str | None = None
+        self._polling_enabled: bool = DEFAULT_POLLING_ENABLED
+        self._poll_interval: int = DEFAULT_POLL_INTERVAL
+        self._reauth_entry = None
 
-    async def _validate_api_token(self, api_token: str) -> tuple[bool, str | None]:
-        """Validate the API token by trying to fetch networks.
-
-        Returns:
-            Tuple of (success, error_message)
-        """
-        session = async_get_clientsession(self.hass)
-        client = HafeleClient(api_token, session, timeout=6)
-
-        try:
-            networks = await client.get_networks()
-            if not networks:
-                return False, "no_networks_found"
-
-            # Get device counts for each network
-            self._networks = []
-            for network in networks:
-                devices = await client.get_devices_for_network(network.id)
-                self._networks.append(
-                    {
-                        "id": network.id,
-                        "name": network.name,
-                        "device_count": len(devices),
-                    }
-                )
-            return True, None
-        except HafeleAPIError as err:
-            _LOGGER.error("Failed to connect to Häfele API: %s", err)
-            if "401" in str(err):
-                return False, "invalid_auth"
-            return False, "cannot_connect"
-        except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected error occurred: %s", err)
-            return False, "unknown"
+    # ------------------------------------------------------------------
+    # Step 1: choose connection type
+    # ------------------------------------------------------------------
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
-        errors = {}
+        """Ask whether to use local MQTT or cloud API."""
+        if user_input is not None:
+            connection_type = user_input[CONF_CONNECTION_TYPE]
+            if connection_type == CONNECTION_TYPE_MQTT:
+                return await self.async_step_mqtt_setup()
+            return await self.async_step_cloud_credentials()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_CONNECTION_TYPE, default=CONNECTION_TYPE_MQTT
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[CONNECTION_TYPE_MQTT, CONNECTION_TYPE_CLOUD],
+                            mode=SelectSelectorMode.LIST,
+                            translation_key=CONF_CONNECTION_TYPE,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2a: MQTT setup
+    # ------------------------------------------------------------------
+
+    async def async_step_mqtt_setup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure MQTT broker source and topic prefix."""
+        errors: dict[str, str] = {}
+        ha_mqtt_available = "mqtt" in self.hass.config.components
+
+        if user_input is not None:
+            use_ha = user_input[CONF_MQTT_USE_HA]
+            self._mqtt_topic_prefix = user_input[CONF_MQTT_TOPIC_PREFIX]
+            self._polling_enabled = user_input[CONF_POLLING_ENABLED]
+            self._poll_interval = max(MIN_POLL_INTERVAL, int(user_input[CONF_POLL_INTERVAL]))
+
+            if use_ha:
+                if not ha_mqtt_available:
+                    errors["base"] = "mqtt_not_configured"
+                else:
+                    await self.async_set_unique_id(f"mqtt_{self._mqtt_topic_prefix}")
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title="Häfele Connect Mesh (Local)",
+                        data={
+                            CONF_CONNECTION_TYPE: CONNECTION_TYPE_MQTT,
+                            CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
+                            CONF_MQTT_USE_HA: True,
+                            CONF_POLLING_ENABLED: self._polling_enabled,
+                            CONF_POLL_INTERVAL: self._poll_interval,
+                        },
+                    )
+            else:
+                return await self.async_step_mqtt_broker()
+
+        return self.async_show_form(
+            step_id="mqtt_setup",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_MQTT_USE_HA, default=ha_mqtt_available
+                    ): BooleanSelector(),
+                    vol.Required(
+                        CONF_MQTT_TOPIC_PREFIX, default=DEFAULT_MQTT_TOPIC_PREFIX
+                    ): str,
+                    vol.Required(
+                        CONF_POLLING_ENABLED, default=DEFAULT_POLLING_ENABLED
+                    ): BooleanSelector(),
+                    vol.Required(
+                        CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_POLL_INTERVAL,
+                            max=3600,
+                            step=5,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2a (continued): custom MQTT broker credentials
+    # ------------------------------------------------------------------
+
+    async def async_step_mqtt_broker(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure custom MQTT broker connection details."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            await self.async_set_unique_id(f"mqtt_{self._mqtt_topic_prefix}")
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(
+                title="Häfele Connect Mesh (Local)",
+                data={
+                    CONF_CONNECTION_TYPE: CONNECTION_TYPE_MQTT,
+                    CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
+                    CONF_MQTT_USE_HA: False,
+                    CONF_MQTT_BROKER: user_input[CONF_MQTT_BROKER],
+                    CONF_MQTT_PORT: user_input[CONF_MQTT_PORT],
+                    CONF_MQTT_USERNAME: user_input.get(CONF_MQTT_USERNAME, ""),
+                    CONF_MQTT_PASSWORD: user_input.get(CONF_MQTT_PASSWORD, ""),
+                    CONF_POLLING_ENABLED: self._polling_enabled,
+                    CONF_POLL_INTERVAL: self._poll_interval,
+                },
+            )
+
+        return self.async_show_form(
+            step_id="mqtt_broker",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MQTT_BROKER): str,
+                    vol.Required(
+                        CONF_MQTT_PORT, default=DEFAULT_MQTT_PORT
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=1, max=65535, mode=NumberSelectorMode.BOX
+                        )
+                    ),
+                    vol.Optional(CONF_MQTT_USERNAME): TextSelector(
+                        TextSelectorConfig(autocomplete="username")
+                    ),
+                    vol.Optional(CONF_MQTT_PASSWORD): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2b: cloud credentials (formerly async_step_user)
+    # ------------------------------------------------------------------
+
+    async def async_step_cloud_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle cloud API token entry."""
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             api_token = user_input[CONF_API_TOKEN]
@@ -83,7 +239,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = error
 
         return self.async_show_form(
-            step_id="user",
+            step_id="cloud_credentials",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_API_TOKEN): str,
@@ -92,11 +248,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    # ------------------------------------------------------------------
+    # Step 3 (cloud only): network selection
+    # ------------------------------------------------------------------
+
     async def async_step_network(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle network selection."""
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             network_id = user_input[CONF_NETWORK_ID]
@@ -105,9 +265,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             if selected_network:
+                await self.async_set_unique_id(network_id)
+                self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=selected_network["name"],
                     data={
+                        CONF_CONNECTION_TYPE: CONNECTION_TYPE_CLOUD,
                         CONF_API_TOKEN: self._api_token,
                         CONF_NETWORK_ID: network_id,
                     },
@@ -115,14 +278,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             errors["base"] = "network_not_found"
 
-        # Create network options with placeholders for translation
         network_options = {
             net["id"]: f"{net['name']} ({net['device_count']})"
             for net in self._networks
-        }
-
-        network_schema = {
-            vol.Required(CONF_NETWORK_ID): vol.In(network_options),
         }
 
         placeholders = {
@@ -131,28 +289,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="network",
-            data_schema=vol.Schema(network_schema),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_NETWORK_ID): vol.In(network_options),
+                }
+            ),
             errors=errors,
             description_placeholders=placeholders,
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(
-        config_entry: ConfigEntry,
-    ) -> HafeleOptionsFlowHandler:
-        """Create the options flow."""
-        return HafeleOptionsFlowHandler()
-
-    async def async_migrate_entry(self, config_entry: ConfigEntry) -> bool:
-        """Migrate old entry."""
-        _LOGGER.debug("Migrating from version %s", config_entry.version)
-
-        if config_entry.version == 1:
-            # No migration needed yet
-            return True
-
-        return False
+    # ------------------------------------------------------------------
+    # Reauth
+    # ------------------------------------------------------------------
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:
         """Handle reauthorization request."""
@@ -166,7 +314,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle reauthorization confirmation."""
         errors = {}
-        
+
         if user_input is not None:
             api_token = user_input[CONF_API_TOKEN]
             valid, error = await self._validate_api_token(api_token)
@@ -192,43 +340,104 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
+    # ------------------------------------------------------------------
+    # Migration
+    # ------------------------------------------------------------------
 
-class HafeleOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle Häfele Connect Mesh options."""
+    async def async_migrate_entry(self, config_entry: config_entries.ConfigEntry) -> bool:
+        """Migrate old entry."""
+        _LOGGER.debug("Migrating from version %s", config_entry.version)
 
-    def __init__(self) -> None:
-        """Initialize options flow."""
-        self._conf_app_id: str | None = None
+        if config_entry.version == 1:
+            # No migration needed yet
+            return True
+
+        return False
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    async def _validate_api_token(self, api_token: str) -> tuple[bool, str | None]:
+        """Validate the API token by fetching networks."""
+        session = async_get_clientsession(self.hass)
+        client = HafeleClient(api_token, session, timeout=6)
+
+        try:
+            networks = await client.get_networks()
+            if not networks:
+                return False, "no_networks_found"
+
+            self._networks = []
+            for network in networks:
+                devices = await client.get_devices_for_network(network.id)
+                self._networks.append(
+                    {
+                        "id": network.id,
+                        "name": network.name,
+                        "device_count": len(devices),
+                    }
+                )
+            return True, None
+        except HafeleAPIError as err:
+            _LOGGER.error("Failed to connect to Häfele API: %s", err)
+            if "401" in str(err):
+                return False, "invalid_auth"
+            return False, "cannot_connect"
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.exception("Unexpected error occurred: %s", err)
+            return False, "unknown"
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for Häfele Connect Mesh."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize the options flow."""
+        self._entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage options."""
+        """Manage polling options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            poll_interval = max(MIN_POLL_INTERVAL, int(user_input[CONF_POLL_INTERVAL]))
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_POLLING_ENABLED: user_input[CONF_POLLING_ENABLED],
+                    CONF_POLL_INTERVAL: poll_interval,
+                },
+            )
 
-        options = {
-            vol.Optional(
-                CONF_SCAN_INTERVAL,
-                default=self.config_entry.options.get(
-                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-                ),
-            ): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
-            vol.Optional(
-                CONF_NEW_DEVICES_CHECK_INTERVAL,
-                default=self.config_entry.options.get(
-                    CONF_NEW_DEVICES_CHECK_INTERVAL, DEFAULT_NEW_DEVICES_CHECK_INTERVAL
-                ),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
-            vol.Optional(
-                CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
-                default=self.config_entry.options.get(
-                    CONF_DEVICE_DETAILS_UPDATE_INTERVAL, DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL
-                ),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
-        }
+        # Pre-populate from current options, falling back to entry data
+        current_polling_enabled = self._entry.options.get(
+            CONF_POLLING_ENABLED,
+            self._entry.data.get(CONF_POLLING_ENABLED, DEFAULT_POLLING_ENABLED),
+        )
+        current_poll_interval = self._entry.options.get(
+            CONF_POLL_INTERVAL,
+            self._entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+        )
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(options),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_POLLING_ENABLED, default=current_polling_enabled
+                    ): BooleanSelector(),
+                    vol.Required(
+                        CONF_POLL_INTERVAL, default=current_poll_interval
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_POLL_INTERVAL,
+                            max=3600,
+                            step=5,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
+                    ),
+                }
+            ),
         )

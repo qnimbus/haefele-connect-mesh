@@ -1,7 +1,3 @@
-# Ensure .cursor folder is tracked
-!.cursor/
-!.cursor/**/*
-
 # Python
 __pycache__/
 *.py[cod]
@@ -52,9 +48,32 @@ logs/
 .env.local
 .env.*.local
 
-# Keep .cursor directory
-!.cursor/
-!.cursor/**/*
+# HA dev config (ignore all except configuration.yaml and mosquitto config)
+config/*
+!config/configuration.yaml
+!config/mosquitto/
+config/mosquitto/*
+!config/mosquitto/mosquitto.conf
+
+# Playwright test artifacts
+.playwright-mcp/
+
+# Claude Code persistence (.claude-home/ is tracked selectively)
+# Track: .claude.json (MCP servers, project settings), projects/ (memory), plugins/
+# Ignore: credentials, history, cache, and all ephemeral runtime data
+.claude-home/.claude/.credentials.json
+.claude-home/.claude/history.jsonl
+.claude-home/.claude/cache/
+.claude-home/.claude/backups/
+.claude-home/.claude/debug/
+.claude-home/.claude/downloads/
+.claude-home/.claude/telemetry/
+.claude-home/.claude/shell-snapshots/
+.claude-home/.claude/file-history/
+.claude-home/.claude/session-env/
+.claude-home/.claude/ide/
+.claude-home/.claude/plans/
+.claude-home/.claude/mcp-needs-auth-cache.json
 
 # Documentation
 docs/_build/
@@ -64,3 +83,6 @@ site/
 dist/
 build/
 *.tar.gz
+.claude-home/.claude/plugins/marketplaces/
+.claude-home/.claude/projects/**/*.jsonl
+.claude-home/.claude/projects/**/subagents/

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 from datetime import datetime, UTC
-import json
-import math
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
-    ATTR_COLOR_TEMP,
+    ATTR_COLOR_TEMP_KELVIN,
     ATTR_HS_COLOR,
     ColorMode,
     LightEntity,
@@ -26,7 +25,6 @@ from homeassistant.util.color import (
     value_to_brightness,
     brightness_to_value,
     color_temperature_kelvin_to_mired,
-    color_temperature_mired_to_kelvin,
 )
 from homeassistant.util.percentage import percentage_to_ranged_value
 
@@ -41,11 +39,17 @@ from .const import (
     MIN_MIREDS,
     MAX_MIREDS,
 )
-from .api.client import HafeleClient, HafeleAPIError
 from .coordinator import HafeleUpdateCoordinator
+from .mqtt.coordinator import HafeleMQTTCoordinator
 from .models.device import Device as HafeleDevice
+from .models.mqtt_device import MQTTDevice
 
 _LOGGER = logging.getLogger(__name__)
+
+# Freshness limit for MQTT devices (push-based; 10 minutes)
+_MQTT_FRESHNESS_SECONDS = 600
+# Freshness limit for cloud devices (polled every 30 s; 2 minutes)
+_CLOUD_FRESHNESS_SECONDS = 120
 
 
 async def async_setup_entry(
@@ -54,16 +58,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Häfele Connect Mesh Light platform."""
-    coordinators = hass.data[DOMAIN][config_entry.entry_id]["coordinators"]
-    devices = hass.data[DOMAIN][config_entry.entry_id]["devices"]
+    runtime_data = config_entry.runtime_data
 
-    entities = []
-    for device in devices:
-        if device.id in coordinators and device.is_light:
-            coordinator = coordinators[device.id]
-            entities.append(
-                HaefeleConnectMeshLight(coordinator, device, config_entry.entry_id)
-            )
+    lights = [device for device in runtime_data.devices if device.is_light]
+    entities = [
+        HaefeleConnectMeshLight(runtime_data.coordinators[light.id], light, config_entry)
+        for light in lights
+    ]
 
     if entities:
         async_add_entities(entities)
@@ -74,28 +75,27 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
 
     def __init__(
         self,
-        coordinator: HafeleUpdateCoordinator,
-        device: HafeleDevice,
-        entry_id: str,
+        coordinator: HafeleUpdateCoordinator | HafeleMQTTCoordinator,
+        device: HafeleDevice | MQTTDevice,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize the light."""
         super().__init__(coordinator)
 
         self._device = device
-        self._entry_id = entry_id
+        self._entry = entry
         self._attr_unique_id = f"{device.id}_light"
         self._attr_name = None
         self._attr_has_entity_name = True
 
-        # Set color modes based on device capabilities
         if device.supports_hsl:
             self._attr_color_mode = ColorMode.HS
             self._attr_supported_color_modes = {ColorMode.HS}
         elif device.supports_color_temp:
             self._attr_color_mode = ColorMode.COLOR_TEMP
             self._attr_supported_color_modes = {ColorMode.COLOR_TEMP}
-            self._attr_min_mireds = MIN_MIREDS  # Adjust if needed
-            self._attr_max_mireds = MAX_MIREDS  # Adjust if needed
+            self._attr_min_mireds = MIN_MIREDS
+            self._attr_max_mireds = MAX_MIREDS
         else:
             self._attr_color_mode = ColorMode.BRIGHTNESS
             self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
@@ -104,7 +104,7 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         """Handle updated data from the coordinator."""
         _LOGGER.debug(
             "Coordinator update for %s: Raw Data=%s, Is On=%s, Brightness=%s",
-            self.name,
+            self.entity_id or self._device.name,
             self.coordinator.data,
             self.is_on,
             self.brightness,
@@ -114,42 +114,52 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        # Get the gateway ID for this device's network
         gateway_id = None
-        gateways = self.hass.data[DOMAIN][self._entry_id]["gateways"]
+        gateways = self._entry.runtime_data.gateways
         if gateways:
-            # Use the first gateway as the via_device
             gateway_id = gateways[0].id
+
+        device_type = getattr(self._device, "type", None)
+        model = (
+            device_type.value.split(".")[-1].capitalize()
+            if device_type is not None
+            else "Light"
+        )
+        sw_version = getattr(self._device, "bootloader_version", None)
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._device.id)},
-            name=self._device.name,
-            manufacturer=self._device.type.manufacturer,
-            model=self._device.type.value.split(".")[-1].capitalize(),
-            sw_version=self._device.bootloader_version,
+            name=self.entity_id or self._device.name,
+            manufacturer="Häfele",
+            model=model,
+            sw_version=sw_version,
             via_device=(DOMAIN, gateway_id) if gateway_id else None,
         )
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        # First check coordinator's availability
         if not self.coordinator.last_update_success:
             return False
 
-        # Then check data validity
+        freshness = (
+            _MQTT_FRESHNESS_SECONDS
+            if isinstance(self._device, MQTTDevice)
+            else _CLOUD_FRESHNESS_SECONDS
+        )
+
         is_available = (
             self.coordinator.data is not None
             and isinstance(self.coordinator.data.get("state"), dict)
             and "power" in self.coordinator.data["state"]
             and "lightness" in self.coordinator.data["state"]
-            # Check if last update was within reasonable time (2 minutes)
-            and (datetime.now(UTC) - self._device.last_updated).total_seconds() < 120
+            and (datetime.now(UTC) - self._device.last_updated).total_seconds()
+            < freshness
         )
 
         _LOGGER.debug(
             "Availability check for %s: %s (Data: %s, Last Update: %s)",
-            self.name,
+            self.entity_id or self._device.name,
             is_available,
             self.coordinator.data,
             self._device.last_updated,
@@ -161,11 +171,10 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         """Return true if light is on."""
         if not self.available:
             return None
-        # Debug log to see what data we're working with
         _LOGGER.debug(
-            "Checking is_on for %s with data: %s", self.name, self.coordinator.data
+            "Checking is_on for %s with data: %s", self.entity_id or self._device.name, self.coordinator.data
         )
-        return self.coordinator.data["state"]["power"]  # API returns boolean
+        return self.coordinator.data["state"]["power"]
 
     @property
     def brightness(self) -> int | None:
@@ -186,7 +195,6 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
 
         temperature = self.coordinator.data["state"].get("temperature")
         if temperature is not None:
-            # Convert mesh value to Kelvin first
             kelvin = MIN_KELVIN + (temperature / 65535) * (MAX_KELVIN - MIN_KELVIN)
             return color_temperature_kelvin_to_mired(kelvin)
         return None
@@ -194,10 +202,11 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""
         try:
+            current = self.coordinator.data["state"]
             new_state = {
                 "power": True,
-                "lightness": self.coordinator.data["state"]["lightness"],
-                "lastLightness": self.coordinator.data["state"]["lastLightness"],
+                "lightness": current.get("lightness", 0),
+                "lastLightness": current.get("lastLightness", current.get("lightness", 0)),
             }
 
             if ATTR_BRIGHTNESS in kwargs:
@@ -207,136 +216,129 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                     )
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid brightness value for {self.name}: {ex}"
+                        f"Invalid brightness value for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
                 try:
-                    await self.coordinator.client.set_lightness(
-                        self._device, lightness / 100
-                    )
+                    await self.coordinator.async_set_lightness(lightness / 100)
                     new_state["lightness"] = percentage_to_ranged_value(
                         BRIGHTNESS_SCALE_MESH, lightness
                     )
-                except HafeleAPIError as ex:
+                except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set brightness for {self.name}: {ex}"
+                        f"Failed to set brightness for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
-            if ATTR_COLOR_TEMP in kwargs and self._device.supports_color_temp:
-                mireds = kwargs[ATTR_COLOR_TEMP]
+            if ATTR_COLOR_TEMP_KELVIN in kwargs and self._device.supports_color_temp:
+                kelvin = kwargs[ATTR_COLOR_TEMP_KELVIN]
                 try:
-                    # Convert mireds to Kelvin, then to mesh value
-                    kelvin = color_temperature_mired_to_kelvin(mireds)
-                    # Map Kelvin range to mesh range (0-65535)
-                    mesh_temp = round(
+                    await self.coordinator.async_set_temperature(kelvin)
+                    new_state["temperature"] = round(
                         ((kelvin - MIN_KELVIN) / (MAX_KELVIN - MIN_KELVIN)) * 65535
                     )
-
-                    await self.coordinator.client.set_temperature(
-                        self._device, mesh_temp
-                    )
-                    new_state["temperature"] = kwargs[ATTR_COLOR_TEMP]
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid color temperature value for {self.name}: {ex}"
+                        f"Invalid color temperature value for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
-                except HafeleAPIError as ex:
+                except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set color temperature for {self.name}: {ex}"
+                        f"Failed to set color temperature for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
             if ATTR_HS_COLOR in kwargs and self._device.supports_hsl:
                 try:
                     hue, saturation = kwargs[ATTR_HS_COLOR]
-                    await self.coordinator.client.set_hsl(self._device, hue, saturation)
+                    await self.coordinator.async_set_hsl(hue, saturation / 100)
                     new_state["hue"] = hue
                     new_state["saturation"] = saturation
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid HS color values for {self.name}: {ex}"
+                        f"Invalid HS color values for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
-                except HafeleAPIError as ex:
+                except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set HS color for {self.name}: {ex}"
+                        f"Failed to set HS color for {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
             try:
-                await self.coordinator.client.power_on(self._device)
-            except HafeleAPIError as ex:
+                await self.coordinator.async_set_power(True)
+            except Exception as ex:
                 raise HomeAssistantError(
-                    f"Failed to power on {self.name}: {ex}"
+                    f"Failed to power on {self.entity_id or self._device.name}: {ex}"
                 ) from ex
 
-            # Update coordinator data immediately
+            # Optimistic update — reflects change before next poll/push
             self.coordinator.data = {"state": new_state}
             self.async_write_ha_state()
 
+            if hasattr(self.coordinator, "async_request_state"):
+                await asyncio.sleep(1.0)
+                await self.coordinator.async_request_state()
+
         except (ServiceValidationError, HomeAssistantError):
-            # Re-raise these as they are already properly handled exceptions
             raise
         except Exception as ex:
-            # Catch any other unexpected exceptions and wrap them
-            _LOGGER.exception("Unexpected error turning on %s", self.name)
-            raise HomeAssistantError(f"Unexpected error turning on {self.name}") from ex
+            _LOGGER.exception("Unexpected error turning on %s", self.entity_id or self._device.name)
+            raise HomeAssistantError(f"Unexpected error turning on {self.entity_id or self._device.name}") from ex
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
         try:
-            await self.coordinator.client.power_off(self._device)
+            await self.coordinator.async_set_power(False)
 
-            # Update coordinator data immediately
+            # Optimistic update
+            current = self.coordinator.data["state"]
             self.coordinator.data = {
                 "state": {
                     "power": False,
-                    "lightness": self.coordinator.data["state"]["lightness"],
-                    "lastLightness": self.coordinator.data["state"]["lastLightness"],
+                    "lightness": current.get("lightness", 0),
+                    "lastLightness": current.get("lastLightness", current.get("lightness", 0)),
                 }
             }
             self.async_write_ha_state()
 
-            # Then refresh from API to confirm
-            # await self.coordinator.async_request_refresh()
+            if hasattr(self.coordinator, "async_request_state"):
+                await asyncio.sleep(1.0)
+                await self.coordinator.async_request_state()
 
-        except HafeleAPIError as ex:
-            _LOGGER.error("Failed to turn off light %s: %s", self.name, str(ex))
+        except Exception as ex:
+            _LOGGER.error("Failed to turn off light %s: %s", self.entity_id or self._device.name, str(ex))
 
     @property
     def extra_state_attributes(self) -> dict:
         """Return additional state attributes."""
-        # Get network info from the device
-        network_info = {}
-        try:
-            # Get network data from the config entry
-            network_id = self._device.network_id
-            entry = self.platform.config_entry
-
-            if entry and entry.data.get("network_id") == network_id:
-                network_info = {
-                    "network_id": network_id,
-                    "network_name": entry.title,  # Config entry title is the network name
-                }
-        except Exception as ex:
-            _LOGGER.debug("Could not get network info: %s", str(ex))
-
-        return {
-            **network_info,
+        attrs: dict[str, Any] = {
             "device_id": self._device.id,
-            "device_type": self._device.type,
-            "update_interval": self.coordinator.update_interval.total_seconds(),
-            "bootloader_version": self._device.bootloader_version,
-            # "raw_state": self.coordinator.data["state"]
-            # if self.coordinator.data
-            # else None,
         }
+
+        # Cloud-specific attributes
+        device_type = getattr(self._device, "type", None)
+        if device_type is not None:
+            attrs["device_type"] = device_type
+
+        bootloader = getattr(self._device, "bootloader_version", None)
+        if bootloader is not None:
+            attrs["bootloader_version"] = bootloader
+
+        network_id = getattr(self._device, "network_id", None)
+        if network_id is not None:
+            attrs["network_id"] = network_id
+            entry = self.platform.config_entry
+            if entry and entry.data.get("network_id") == network_id:
+                attrs["network_name"] = entry.title
+
+        update_interval = self.coordinator.update_interval
+        if update_interval is not None:
+            attrs["update_interval"] = update_interval.total_seconds()
+
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
 
-        # Only restore state if we don't have fresh data yet
         if self.coordinator.data is None:
             if last_state := await self.async_get_last_state():
-                # Only restore the state, don't update coordinator data
                 if last_state.state == "on":
                     self._attr_is_on = True
                     self._attr_brightness = last_state.attributes.get("brightness", 255)

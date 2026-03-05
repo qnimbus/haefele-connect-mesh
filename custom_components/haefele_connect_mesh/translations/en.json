@@ -2,6 +2,45 @@
   "config": {
     "step": {
       "user": {
+        "title": "Choose Connection Type",
+        "data": {
+          "connection_type": "Connection type"
+        },
+        "data_description": {
+          "connection_type": "Local MQTT uses your existing MQTT broker for real-time local control. Cloud uses the Häfele cloud API."
+        }
+      },
+      "mqtt_setup": {
+        "title": "Configure Local MQTT",
+        "data": {
+          "use_ha_mqtt": "Use Home Assistant MQTT",
+          "topic_prefix": "MQTT topic prefix",
+          "polling_enabled": "Enable periodic polling",
+          "poll_interval": "Polling interval"
+        },
+        "data_description": {
+          "use_ha_mqtt": "Use the MQTT broker configured in Home Assistant. Disable to connect to a different broker.",
+          "topic_prefix": "The MQTT topic prefix configured in your Häfele Gateway (default: hafele)",
+          "polling_enabled": "Periodically request device state via MQTT. Recommended as a fallback for missed push updates.",
+          "poll_interval": "How often to actively poll device state (seconds). Minimum 10 s."
+        }
+      },
+      "mqtt_broker": {
+        "title": "MQTT Broker Details",
+        "data": {
+          "broker": "Broker host",
+          "port": "Port",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "broker": "Hostname or IP address of your MQTT broker",
+          "port": "MQTT broker port (default: 1883)",
+          "username": "Leave empty if authentication is not required",
+          "password": "Leave empty if authentication is not required"
+        }
+      },
+      "cloud_credentials": {
         "title": "Connect to Häfele Connect Mesh",
         "data": {
           "api_token": "API Token"
@@ -27,10 +66,34 @@
       "invalid_auth": "Invalid authentication",
       "no_networks_found": "No networks found",
       "network_not_found": "Selected network not found",
+      "mqtt_not_configured": "MQTT integration is not configured. Please add the MQTT integration first.",
       "unknown": "Unexpected error"
     },
     "abort": {
       "reauth_successful": "Reauthentication was successful"
+    },
+    "selector": {
+      "connection_type": {
+        "options": {
+          "mqtt": "Local MQTT (Recommended)",
+          "cloud": "Cloud (Legacy)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling Options",
+        "data": {
+          "polling_enabled": "Enable periodic polling",
+          "poll_interval": "Polling interval"
+        },
+        "data_description": {
+          "polling_enabled": "Periodically request device state via MQTT. Recommended as a fallback for missed push updates.",
+          "poll_interval": "How often to actively poll device state (seconds). Minimum 10 s."
+        }
+      }
     }
   },
   "entity": {
@@ -51,19 +114,6 @@
     "switch": {
       "socket": {
         "name": "Socket"
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Häfele Connect Mesh Options",
-        "description": "Configure update intervals",
-        "data": {
-          "scan_interval": "Status update interval (seconds)",
-          "new_devices_check_interval": "Check for new devices interval (minutes)",
-          "device_details_update_interval": "Device details update interval (minutes)"
-        }
       }
     }
   }

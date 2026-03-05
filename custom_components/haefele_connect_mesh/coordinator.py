@@ -25,6 +25,8 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_NEW_DEVICES_CHECK_INTERVAL,
     CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
+    MIN_KELVIN,
+    MAX_KELVIN,
 )
 from .models.device import Device
 from .exceptions import HafeleAPIError
@@ -36,18 +38,18 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, 
-        hass: HomeAssistant, 
-        client: HafeleClient, 
+        self,
+        hass: HomeAssistant,
+        client: HafeleClient,
         device: Device,
         entry: ConfigEntry,
     ) -> None:
         """Initialize."""
         self._entry = entry
         self._entry_id = entry.entry_id
-        
+
         scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        
+
         super().__init__(
             hass,
             _LOGGER,
@@ -55,7 +57,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             update_interval=timedelta(seconds=scan_interval),
             always_update=False,
         )
-        
+
         self.client = client
         self.device = device
         self._device_registry = dr.async_get(hass)
@@ -68,7 +70,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def device_details_update_interval(self) -> timedelta:
         """Get the device details update interval."""
         minutes = self._entry.options.get(
-            CONF_DEVICE_DETAILS_UPDATE_INTERVAL, 
+            CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
             DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL
         )
         return timedelta(minutes=minutes)
@@ -77,7 +79,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def new_devices_check_interval(self) -> timedelta:
         """Get the new devices check interval."""
         minutes = self._entry.options.get(
-            CONF_NEW_DEVICES_CHECK_INTERVAL, 
+            CONF_NEW_DEVICES_CHECK_INTERVAL,
             DEFAULT_NEW_DEVICES_CHECK_INTERVAL
         )
         return timedelta(minutes=minutes)
@@ -144,13 +146,13 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
                 # Get existing device IDs
                 existing_device_ids = {
-                    device.id 
-                    for device in self.hass.data[DOMAIN][self._entry_id]["devices"]
+                    device.id
+                    for device in self._entry.runtime_data.devices
                 }
-                
+
                 # Find new devices
                 new_device_objects = [
-                    device for device in new_devices 
+                    device for device in new_devices
                     if device.id not in existing_device_ids
                 ]
 
@@ -163,8 +165,9 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         "sensor": []
                     }
 
+                    entity_registry = er.async_get(self.hass)
                     for device in new_device_objects:
-                        if device.id not in self.hass.data[DOMAIN][self._entry_id]["coordinators"]:
+                        if device.id not in self._entry.runtime_data.coordinators:
                             continue
 
                         device_id = f"{DOMAIN}_{device.id}"
@@ -181,9 +184,9 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                             if light_unique_id not in existing_unique_ids:
                                 platform_entities["light"].append(
                                     HaefeleConnectMeshLight(
-                                        self.hass.data[DOMAIN][self._entry_id]["coordinators"][device.id],
+                                        self._entry.runtime_data.coordinators[device.id],
                                         device,
-                                        self._entry_id
+                                        self._entry
                                     )
                                 )
 
@@ -193,23 +196,23 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                             if switch_unique_id not in existing_unique_ids:
                                 platform_entities["switch"].append(
                                     HaefeleConnectMeshSwitch(
-                                        self.hass.data[DOMAIN][self._entry_id]["coordinators"][device.id],
+                                        self._entry.runtime_data.coordinators[device.id],
                                         device,
-                                        self._entry_id
+                                        self._entry
                                     )
                                 )
 
                         # Add diagnostic entities
                         from .binary_sensor import HaefeleUpdateSuccessSensor
                         from .sensor import HaefeleLastUpdateSensor
-                        
+
                         update_sensor_id = f"{device.id}_last_update_success"
                         if update_sensor_id not in existing_unique_ids:
                             platform_entities["binary_sensor"].append(
                                 HaefeleUpdateSuccessSensor(
-                                    self.hass.data[DOMAIN][self._entry_id]["coordinators"][device.id],
+                                    self._entry.runtime_data.coordinators[device.id],
                                     device,
-                                    self._entry_id
+                                    self._entry
                                 )
                             )
 
@@ -217,9 +220,9 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         if last_update_id not in existing_unique_ids:
                             platform_entities["sensor"].append(
                                 HaefeleLastUpdateSensor(
-                                    self.hass.data[DOMAIN][self._entry_id]["coordinators"][device.id],
+                                    self._entry.runtime_data.coordinators[device.id],
                                     device,
-                                    self._entry_id
+                                    self._entry
                                 )
                             )
 
@@ -255,8 +258,8 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             )
         except Exception as error:
             _LOGGER.error(
-                "Error checking for new devices for network %s: %s", 
-                self.device.network_id, 
+                "Error checking for new devices for network %s: %s",
+                self.device.network_id,
                 str(error)
             )
         finally:
@@ -278,11 +281,11 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
             # Transform status data based on device type
             transformed_data = {"state": {}}
-            
+
             # Get the power state for all device types
             if "power" in status["state"]:
                 transformed_data["state"]["power"] = status["state"]["power"]
-            
+
             # Add lightness only for light devices
             if self.device.is_light and "lightness" in status["state"]:
                 transformed_data["state"]["lightness"] = status["state"]["lightness"]
@@ -344,3 +347,27 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 str(error)
             )
             raise UpdateFailed(f"Unexpected error: {error}")
+
+    # ------------------------------------------------------------------
+    # Command methods — uniform interface shared with HafeleMQTTCoordinator
+    # ------------------------------------------------------------------
+
+    async def async_set_power(self, on: bool) -> None:
+        """Turn the device on or off via the cloud API."""
+        if on:
+            await self.client.power_on(self.device)
+        else:
+            await self.client.power_off(self.device)
+
+    async def async_set_lightness(self, value: float) -> None:
+        """Set brightness (0.0–1.0) via the cloud API."""
+        await self.client.set_lightness(self.device, value)
+
+    async def async_set_temperature(self, kelvin: int) -> None:
+        """Set color temperature (Kelvin) via the cloud API."""
+        mesh_temp = round(((kelvin - MIN_KELVIN) / (MAX_KELVIN - MIN_KELVIN)) * 65535)
+        await self.client.set_temperature(self.device, mesh_temp)
+
+    async def async_set_hsl(self, hue: float, saturation: float) -> None:
+        """Set HSL color via the cloud API."""
+        await self.client.set_hsl(self.device, hue, saturation)

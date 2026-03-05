@@ -1,0 +1,7 @@
+colorlog==6.10.1
+homeassistant==2026.2.3
+pip>=21.3.1
+pycares==5.0.1
+aiomqtt>=2.0           # required for DirectMQTTClient (custom broker support)
+paho-mqtt>=2.0         # aiomqtt 2.x requires paho-mqtt 2.x
+ruff==0.14.14

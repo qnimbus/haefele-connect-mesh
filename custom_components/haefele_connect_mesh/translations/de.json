@@ -2,6 +2,45 @@
   "config": {
     "step": {
       "user": {
+        "title": "Verbindungstyp wählen",
+        "data": {
+          "connection_type": "Verbindungstyp"
+        },
+        "data_description": {
+          "connection_type": "Lokales MQTT verwendet Ihren vorhandenen MQTT-Broker für lokale Echtzeitsteuerung. Cloud verwendet die Häfele Cloud-API."
+        }
+      },
+      "mqtt_setup": {
+        "title": "Lokales MQTT konfigurieren",
+        "data": {
+          "use_ha_mqtt": "Home Assistant MQTT verwenden",
+          "topic_prefix": "MQTT-Topic-Präfix",
+          "polling_enabled": "Regelmäßige Abfrage aktivieren",
+          "poll_interval": "Abfrageintervall"
+        },
+        "data_description": {
+          "use_ha_mqtt": "Den in Home Assistant konfigurierten MQTT-Broker verwenden. Deaktivieren, um einen anderen Broker zu verbinden.",
+          "topic_prefix": "Das in Ihrem Häfele Gateway konfigurierte MQTT-Topic-Präfix (Standard: hafele)",
+          "polling_enabled": "Gerätestatus regelmäßig per MQTT abfragen. Empfohlen als Fallback für verpasste Push-Aktualisierungen.",
+          "poll_interval": "Wie oft der Gerätestatus aktiv abgefragt wird (Sekunden). Mindestens 10 s."
+        }
+      },
+      "mqtt_broker": {
+        "title": "MQTT-Broker-Details",
+        "data": {
+          "broker": "Broker-Host",
+          "port": "Port",
+          "username": "Benutzername",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "broker": "Hostname oder IP-Adresse Ihres MQTT-Brokers",
+          "port": "MQTT-Broker-Port (Standard: 1883)",
+          "username": "Leer lassen, wenn keine Authentifizierung erforderlich ist",
+          "password": "Leer lassen, wenn keine Authentifizierung erforderlich ist"
+        }
+      },
+      "cloud_credentials": {
         "title": "Mit Häfele Connect Mesh verbinden",
         "data": {
           "api_token": "API-Token"
@@ -20,7 +59,31 @@
       "invalid_auth": "Ungültige Authentifizierung",
       "no_networks_found": "Keine Netzwerke gefunden",
       "network_not_found": "Ausgewähltes Netzwerk nicht gefunden",
+      "mqtt_not_configured": "MQTT-Integration ist nicht konfiguriert. Bitte fügen Sie zuerst die MQTT-Integration hinzu.",
       "unknown": "Unerwarteter Fehler"
+    },
+    "selector": {
+      "connection_type": {
+        "options": {
+          "mqtt": "Lokales MQTT (Empfohlen)",
+          "cloud": "Cloud (Legacy)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Abfrageoptionen",
+        "data": {
+          "polling_enabled": "Regelmäßige Abfrage aktivieren",
+          "poll_interval": "Abfrageintervall"
+        },
+        "data_description": {
+          "polling_enabled": "Gerätestatus regelmäßig per MQTT abfragen. Empfohlen als Fallback für verpasste Push-Aktualisierungen.",
+          "poll_interval": "Wie oft der Gerätestatus aktiv abgefragt wird (Sekunden). Mindestens 10 s."
+        }
+      }
     }
   },
   "entity": {

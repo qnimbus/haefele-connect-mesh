@@ -28,18 +28,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Häfele Connect Mesh Switch platform."""
-    coordinators = hass.data[DOMAIN][config_entry.entry_id]["coordinators"]
-    devices = hass.data[DOMAIN][config_entry.entry_id]["devices"]
+    runtime_data = config_entry.runtime_data
+    coordinators = runtime_data.coordinators
+    devices = runtime_data.devices
 
-    # Log available devices and their types
     _LOGGER.debug(
         "Setting up switches. Available devices: %s",
-        [(d.id, d.type, d.is_socket) for d in devices]
+        [(d.id, getattr(d, "type", None), getattr(d, "is_socket", False)) for d in devices]
     )
 
     entities = []
     for device in devices:
-        if device.id in coordinators and device.is_socket:
+        if device.id in coordinators and getattr(device, "is_socket", False):
             try:
                 coordinator = coordinators[device.id]
                 _LOGGER.debug(
@@ -47,9 +47,8 @@ async def async_setup_entry(
                     device.id,
                     coordinator.data
                 )
-                
                 entities.append(
-                    HaefeleConnectMeshSwitch(coordinator, device, config_entry.entry_id)
+                    HaefeleConnectMeshSwitch(coordinator, device, config_entry)
                 )
             except Exception as err:
                 _LOGGER.error(
@@ -76,13 +75,13 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self,
         coordinator: HafeleUpdateCoordinator,
         device: Device,
-        entry_id: str,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
 
         self._device = device
-        self._entry_id = entry_id
+        self._entry = entry
         self._attr_unique_id = f"{device.id}_switch"
         self._attr_name = device.name
         self._attr_has_entity_name = True
@@ -90,17 +89,15 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        # Get the gateway ID for this device's network
         gateway_id = None
-        gateways = self.hass.data[DOMAIN][self._entry_id]["gateways"]
+        gateways = self._entry.runtime_data.gateways
         if gateways:
-            # Use the first gateway as the via_device
             gateway_id = gateways[0].id
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._device.id)},
             name=self._device.name,
-            manufacturer=self._device.type.manufacturer,
+            manufacturer="Häfele",
             model=self._device.type.value.split(".")[-1].capitalize(),
             sw_version=self._device.bootloader_version,
             via_device=(DOMAIN, gateway_id) if gateway_id else None,
@@ -110,16 +107,13 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
     def available(self) -> bool:
         """Return True if entity is available."""
         try:
-            # First check coordinator's availability
             if not self.coordinator.last_update_success:
                 return False
 
-            # Then check data validity
             is_available = (
                 self.coordinator.data is not None
                 and isinstance(self.coordinator.data.get("state"), dict)
                 and "power" in self.coordinator.data["state"]
-                # Check if last update was within reasonable time (2 minutes)
                 and (datetime.now(UTC) - self._device.last_updated).total_seconds() < 120
             )
 
@@ -157,7 +151,6 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
 
-        # Try to get initial state
         try:
             status = await self.coordinator.client.get_device_status(self._device.id)
             self.coordinator.data = {"state": status}
@@ -168,8 +161,6 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 self._device.id,
                 str(err)
             )
-            
-            # Restore state if we don't have fresh data
+
             if last_state := await self.async_get_last_state():
                 self._attr_is_on = last_state.state == "on"
-  

@@ -2,6 +2,45 @@
   "config": {
     "step": {
       "user": {
+        "title": "Verbindingstype kiezen",
+        "data": {
+          "connection_type": "Verbindingstype"
+        },
+        "data_description": {
+          "connection_type": "Lokale MQTT gebruikt uw bestaande MQTT-broker voor realtime lokale besturing. Cloud gebruikt de Häfele cloud-API."
+        }
+      },
+      "mqtt_setup": {
+        "title": "Lokale MQTT configureren",
+        "data": {
+          "use_ha_mqtt": "Home Assistant MQTT gebruiken",
+          "topic_prefix": "MQTT-onderwerpprefix",
+          "polling_enabled": "Periodiek pollen inschakelen",
+          "poll_interval": "Pollinginterval"
+        },
+        "data_description": {
+          "use_ha_mqtt": "De in Home Assistant geconfigureerde MQTT-broker gebruiken. Schakel uit om verbinding te maken met een andere broker.",
+          "topic_prefix": "Het MQTT-onderwerpprefix dat is geconfigureerd in uw Häfele Gateway (standaard: hafele)",
+          "polling_enabled": "Periodiek apparaatstatus opvragen via MQTT. Aanbevolen als terugval voor gemiste push-updates.",
+          "poll_interval": "Hoe vaak de apparaatstatus actief wordt opgevraagd (seconden). Minimaal 10 s."
+        }
+      },
+      "mqtt_broker": {
+        "title": "MQTT-brokergegevens",
+        "data": {
+          "broker": "Brokerhost",
+          "port": "Poort",
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "broker": "Hostnaam of IP-adres van uw MQTT-broker",
+          "port": "MQTT-brokerpoort (standaard: 1883)",
+          "username": "Leeg laten als authenticatie niet vereist is",
+          "password": "Leeg laten als authenticatie niet vereist is"
+        }
+      },
+      "cloud_credentials": {
         "title": "Verbind met Häfele Connect Mesh",
         "data": {
           "api_token": "API Token"
@@ -20,7 +59,31 @@
       "invalid_auth": "Ongeldige authenticatie",
       "no_networks_found": "Geen netwerken gevonden",
       "network_not_found": "Geselecteerd netwerk niet gevonden",
+      "mqtt_not_configured": "MQTT-integratie is niet geconfigureerd. Voeg eerst de MQTT-integratie toe.",
       "unknown": "Onverwachte fout"
+    },
+    "selector": {
+      "connection_type": {
+        "options": {
+          "mqtt": "Lokale MQTT (Aanbevolen)",
+          "cloud": "Cloud (Legacy)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pollingopties",
+        "data": {
+          "polling_enabled": "Periodiek pollen inschakelen",
+          "poll_interval": "Pollinginterval"
+        },
+        "data_description": {
+          "polling_enabled": "Periodiek apparaatstatus opvragen via MQTT. Aanbevolen als terugval voor gemiste push-updates.",
+          "poll_interval": "Hoe vaak de apparaatstatus actief wordt opgevraagd (seconden). Minimaal 10 s."
+        }
+      }
     }
   },
   "entity": {

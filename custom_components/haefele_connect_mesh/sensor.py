@@ -29,17 +29,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Häfele Connect Mesh Sensor platform."""
-    coordinators = hass.data[DOMAIN][config_entry.entry_id]["coordinators"]
-    devices = hass.data[DOMAIN][config_entry.entry_id]["devices"]
+    runtime_data = config_entry.runtime_data
 
-    # Only create entities for devices that have coordinators
-    entities = []
-    for device in devices:
-        if device.id in coordinators:
-            coordinator = coordinators[device.id]
-            entities.append(
-                HaefeleLastUpdateSensor(coordinator, device, config_entry.entry_id)
-            )
+    entities = [
+        HaefeleLastUpdateSensor(runtime_data.coordinators[device.id], device, config_entry)
+        for device in runtime_data.devices
+    ]
 
     if entities:
         async_add_entities(entities)
@@ -58,13 +53,13 @@ class HaefeleLastUpdateSensor(CoordinatorEntity, SensorEntity):
         self,
         coordinator: HafeleUpdateCoordinator,
         device: Device,
-        entry_id: str,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
 
         self._device = device
-        self._entry_id = entry_id
+        self._entry = entry
         self._attr_unique_id = f"{device.id}_last_update"
         self._attr_has_entity_name = True
         self._attr_translation_key = "last_update"
@@ -72,19 +67,24 @@ class HaefeleLastUpdateSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
-        # Get the gateway ID for this device's network
         gateway_id = None
-        gateways = self.hass.data[DOMAIN][self._entry_id]["gateways"]
+        gateways = self._entry.runtime_data.gateways
         if gateways:
-            # Use the first gateway as the via_device
             gateway_id = gateways[0].id
+
+        device_type = getattr(self._device, "type", None)
+        model = (
+            device_type.value.split(".")[-1].capitalize()
+            if device_type is not None
+            else "Light"
+        )
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._device.id)},
             name=self._device.name,
-            manufacturer=self._device.type.manufacturer,
-            model=self._device.type.value.split(".")[-1].capitalize(),
-            sw_version=self._device.bootloader_version,
+            manufacturer="Häfele",
+            model=model,
+            sw_version=getattr(self._device, "bootloader_version", None),
             via_device=(DOMAIN, gateway_id) if gateway_id else None,
         )
 

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+python3 -m pip install --requirement requirements.txt
+
+# Install Claude Code CLI (native installer, non-interactive)
+if ! command -v claude &> /dev/null; then
+    curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+# Register Playwright MCP server for browser automation
+if command -v claude &> /dev/null; then
+    claude mcp add playwright -- npx -y @playwright/mcp@latest --headless --no-sandbox --caps vision 2>/dev/null || true
+    npx --yes playwright install chrome 2>/dev/null || true
+fi
