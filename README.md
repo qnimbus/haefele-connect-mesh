@@ -17,6 +17,17 @@ To support the development and testing of this integration, Häfele has generous
 
 You can expect to see more features, enhanced stability, and support for additional Häfele devices in the coming months as I put this hardware to work. Stay tuned for updates!
 
+## Update (03-2025): Local MQTT Mode
+
+The integration now supports a **local MQTT mode** as an alternative to cloud polling. Instead of routing commands through the Häfele cloud API, local mode communicates directly with your Connect Mesh Gateway over MQTT — giving you faster response times, no dependency on cloud availability, and full local control.
+
+You can choose between two MQTT connection options:
+
+- **Use HA's built-in MQTT integration** — if you already have the Home Assistant MQTT integration configured, the Häfele integration can piggyback on that connection.
+- **Connect directly to a broker** — point the integration at any MQTT broker (hostname, port, and optional credentials) that your gateway publishes to.
+
+Once set up, devices are discovered automatically from the gateway's MQTT topics. Device states are kept up to date via a configurable periodic poll (default: every 60 seconds, minimum: 10 seconds). The polling interval can be changed at any time via the **Configure** button on the integration card — no need to re-add the integration.
+
 ## Supported Devices
 
 Currently, this integration has been tested with:
