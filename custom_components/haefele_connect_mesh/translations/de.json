@@ -62,12 +62,12 @@
       "mqtt_not_configured": "MQTT-Integration ist nicht konfiguriert. Bitte fügen Sie zuerst die MQTT-Integration hinzu.",
       "unknown": "Unerwarteter Fehler"
     },
-    "selector": {
-      "connection_type": {
-        "options": {
-          "mqtt": "Lokales MQTT (Empfohlen)",
-          "cloud": "Cloud (Legacy)"
-        }
+  },
+  "selector": {
+    "connection_type": {
+      "options": {
+        "mqtt": "Lokales MQTT (Empfohlen)",
+        "cloud": "Cloud (Legacy)"
       }
     }
   },

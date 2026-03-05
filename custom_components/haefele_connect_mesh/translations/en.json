@@ -71,13 +71,13 @@
     },
     "abort": {
       "reauth_successful": "Reauthentication was successful"
-    },
-    "selector": {
-      "connection_type": {
-        "options": {
-          "mqtt": "Local MQTT (Recommended)",
-          "cloud": "Cloud (Legacy)"
-        }
+    }
+  },
+  "selector": {
+    "connection_type": {
+      "options": {
+        "mqtt": "Local MQTT (Recommended)",
+        "cloud": "Cloud (Legacy)"
       }
     }
   },

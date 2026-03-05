@@ -62,12 +62,12 @@
       "mqtt_not_configured": "MQTT-integratie is niet geconfigureerd. Voeg eerst de MQTT-integratie toe.",
       "unknown": "Onverwachte fout"
     },
-    "selector": {
-      "connection_type": {
-        "options": {
-          "mqtt": "Lokale MQTT (Aanbevolen)",
-          "cloud": "Cloud (Legacy)"
-        }
+  },
+  "selector": {
+    "connection_type": {
+      "options": {
+        "mqtt": "Lokale MQTT (Aanbevolen)",
+        "cloud": "Cloud (Legacy)"
       }
     }
   },
