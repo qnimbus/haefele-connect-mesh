@@ -70,11 +70,16 @@ _MQTT_DISCOVERY_TIMEOUT = 10
 
 
 async def _rotational_poll_loop(
+    hass: HomeAssistant,
     coordinators: dict,
     poll_interval: int,
 ) -> None:
     """Poll each MQTT device in rotation, spacing polls evenly within poll_interval."""
     try:
+        # Immediate burst on startup so all devices become available right away.
+        for coordinator in list(coordinators.values()):
+            hass.async_create_task(coordinator.async_request_state())
+
         while True:
             snapshot = list(coordinators.values())
             num = len(snapshot)
@@ -83,7 +88,8 @@ async def _rotational_poll_loop(
                 continue
             sleep_between = max(2.0, poll_interval / num)
             for coordinator in snapshot:
-                await coordinator.async_request_refresh()
+                # Fire-and-forget: do not await so the loop never blocks the event loop.
+                hass.async_create_task(coordinator.async_request_state())
                 await asyncio.sleep(sleep_between)
     except asyncio.CancelledError:
         pass
@@ -273,6 +279,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             discovery_event.set()
             return
 
+        _LOGGER.debug("MQTT discovery payload on %s: %s", msg.topic, payload)
+
         if isinstance(payload, list):
             for item in payload:
                 try:
@@ -282,6 +290,12 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         device_types=item.get("device_types", ["light"]),
                     )
                     discovered_devices.append(device)
+                    _LOGGER.debug(
+                        "Discovered device: %s (addr=%s, types=%s)",
+                        device.device_name,
+                        device.device_addr,
+                        device.device_types,
+                    )
                 except (KeyError, TypeError) as err:
                     _LOGGER.warning("Skipping malformed device entry: %s", err)
         elif isinstance(payload, dict):
@@ -293,6 +307,12 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     device_types=payload.get("device_types", ["light"]),
                 )
                 discovered_devices.append(device)
+                _LOGGER.debug(
+                    "Discovered device: %s (addr=%s, types=%s)",
+                    device.device_name,
+                    device.device_addr,
+                    device.device_types,
+                )
             except (KeyError, TypeError) as err:
                 _LOGGER.warning("Skipping malformed device entry: %s", err)
 
@@ -323,31 +343,43 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     finally:
         unsubscribe_discovery()
 
-    # Build coordinators for each discovered device
+    # Filter to controllable light devices only; Switch-type nodes (physical
+    # switches, remotes, sensors) are input-only and need no HA entity.
+    light_devices = [d for d in discovered_devices if d.is_light]
+    if len(light_devices) < len(discovered_devices):
+        skipped = [d.device_name for d in discovered_devices if not d.is_light]
+        _LOGGER.debug("Skipping non-light devices: %s", skipped)
+
+    # Build coordinators for each discovered light device
     coordinators: dict[str, HafeleMQTTCoordinator] = {}
-    for device in discovered_devices:
+    for device in light_devices:
         coordinator = HafeleMQTTCoordinator(hass, device, prefix, direct_client=direct_client)
         await coordinator.async_setup()
         coordinators[device.id] = coordinator
 
     entry.runtime_data = HafeleEntryData(
         coordinators=coordinators,
-        devices=discovered_devices,
+        devices=light_devices,
         gateways=[],
         prefix=prefix,
         direct_client=direct_client,
     )
 
     if polling_enabled and coordinators:
-        poll_task = hass.async_create_task(
-            _rotational_poll_loop(coordinators, poll_interval),
+        poll_task = hass.async_create_background_task(
+            _rotational_poll_loop(hass, coordinators, poll_interval),
             name="hafele_mqtt_rotational_poll",
         )
-        entry.async_on_unload(poll_task.cancel)
+        async def _cancel_poll_task() -> None:
+            poll_task.cancel()
+
+        entry.async_on_unload(_cancel_poll_task)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.info(
-        "Häfele Connect Mesh (MQTT) set up with %d device(s)", len(discovered_devices)
+        "Häfele Connect Mesh (MQTT) set up with %d light device(s) (%d total discovered)",
+        len(light_devices),
+        len(discovered_devices),
     )
     return True
 

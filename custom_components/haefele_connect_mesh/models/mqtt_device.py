@@ -35,18 +35,19 @@ class MQTTDevice:
 
     @property
     def is_light(self) -> bool:
-        """All MQTT-discovered devices are lights."""
-        return True
+        """Return True if the device is a controllable light."""
+        types_lower = {t.lower() for t in self.device_types}
+        return bool(types_lower & {"light", "multiwhite", "rgb"})
 
     @property
     def supports_hsl(self) -> bool:
         """Return True if the device supports RGB/HSL color."""
-        return "rgb" in self.device_types
+        return any(t.lower() == "rgb" for t in self.device_types)
 
     @property
     def supports_color_temp(self) -> bool:
         """Return True if the device supports color temperature."""
-        return "multiwhite" in self.device_types
+        return any(t.lower() == "multiwhite" for t in self.device_types)
 
     @property
     def bootloader_version(self) -> Optional[str]:
