@@ -62,19 +62,25 @@ jobs:
           release_type = '${{ github.event.inputs.release_type }}'
           prerelease_num = '${{ github.event.inputs.prerelease_number }}'
           
-          # First bump the version according to increment type
-          if increment == 'major':
-              new = current.bump_major()
-          elif increment == 'minor':
-              new = current.bump_minor()
+          if current.prerelease:
+              # Already on a prerelease: keep the same base version, only change the prerelease label
+              base = semver.Version(major=current.major, minor=current.minor, patch=current.patch)
           else:
-              new = current.bump_patch()
-          
-          # Then add prerelease identifier if needed
+              # Stable base: bump according to increment type
+              if increment == 'major':
+                  base = current.bump_major()
+              elif increment == 'minor':
+                  base = current.bump_minor()
+              else:
+                  base = current.bump_patch()
+
+          # Apply prerelease label (or none for stable)
           if release_type == 'alpha':
-              new = semver.Version(major=new.major, minor=new.minor, patch=new.patch, prerelease=f'alpha.{prerelease_num}')
+              new = semver.Version(major=base.major, minor=base.minor, patch=base.patch, prerelease=f'alpha.{prerelease_num}')
           elif release_type == 'beta':
-              new = semver.Version(major=new.major, minor=new.minor, patch=new.patch, prerelease=f'beta.{prerelease_num}')
+              new = semver.Version(major=base.major, minor=base.minor, patch=base.patch, prerelease=f'beta.{prerelease_num}')
+          else:
+              new = base
           
           print(str(new))
           ")
