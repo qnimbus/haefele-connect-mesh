@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Callable
@@ -61,8 +62,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("Subscribed to MQTT topic: %s", status_topic)
 
         # Request initial state
-        await self._publish_get("powerGet")
-        await self._publish_get("lightnessGet")
+        await asyncio.gather(
+            self._publish_get("powerGet"),
+            self._publish_get("lightnessGet"),
+        )
 
     async def async_unsubscribe(self) -> None:
         """Cancel the MQTT subscription."""
@@ -72,8 +75,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_request_state(self) -> None:
         """Request current device state from the gateway."""
-        await self._publish_get("powerGet")
-        await self._publish_get("lightnessGet")
+        await asyncio.gather(
+            self._publish_get("powerGet"),
+            self._publish_get("lightnessGet"),
+        )
 
     # ------------------------------------------------------------------
     # MQTT message handling
