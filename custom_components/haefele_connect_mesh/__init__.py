@@ -15,6 +15,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 
 from .api.client import HafeleClient
@@ -378,6 +379,25 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(_cancel_poll_task)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # suggested_area in DeviceInfo is ignored when a device is restored from the
+    # deleted_devices cache (e.g. after deleting and re-adding the entry). Explicitly
+    # assign the area here for any device that still has none, but never overwrite
+    # an area the user has already set.
+    device_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+    for device in light_devices:
+        if not device.location:
+            continue
+        device_entry = device_reg.async_get_device(identifiers={(DOMAIN, device.id)})
+        if device_entry is None or device_entry.area_id is not None:
+            continue
+        area = area_reg.async_get_area_by_name(device.location)
+        if area is None:
+            area = area_reg.async_create(device.location)
+        device_reg.async_update_device(device_entry.id, area_id=area.id)
+        _LOGGER.debug("Assigned area '%s' to device '%s'", device.location, device.device_name)
+
     _LOGGER.info(
         "Häfele Connect Mesh (MQTT) set up with %d light device(s) (%d total discovered)",
         len(light_devices),
