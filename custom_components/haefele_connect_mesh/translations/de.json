@@ -73,8 +73,21 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Abfrageoptionen",
+      "cloud_options": {
+        "title": "Cloud-Abfrageintervalle",
+        "data": {
+          "scan_interval": "Statusabfrageintervall",
+          "device_details_update_interval": "Gerätedaten-Aktualisierungsintervall",
+          "new_devices_check_interval": "Intervall zur Suche neuer Geräte"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft der Gerätestatus von der Cloud-API abgefragt wird (Sekunden). Standard: 30 s.",
+          "device_details_update_interval": "Wie oft Gerätenamensänderungen geprüft werden (Minuten). Standard: 5 min.",
+          "new_devices_check_interval": "Wie oft nach neu hinzugefügten Geräten gesucht wird (Minuten). Standard: 15 min."
+        }
+      },
+      "mqtt_options": {
+        "title": "MQTT-Abfrageoptionen",
         "data": {
           "polling_enabled": "Regelmäßige Abfrage aktivieren",
           "poll_interval": "Abfrageintervall"

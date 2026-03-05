@@ -73,8 +73,21 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Options d'interrogation",
+      "cloud_options": {
+        "title": "Intervalles d'interrogation cloud",
+        "data": {
+          "scan_interval": "Intervalle d'interrogation d'état",
+          "device_details_update_interval": "Intervalle de mise à jour des détails",
+          "new_devices_check_interval": "Intervalle de détection de nouveaux appareils"
+        },
+        "data_description": {
+          "scan_interval": "À quelle fréquence interroger l'état de l'appareil depuis l'API cloud (secondes). Par défaut : 30 s.",
+          "device_details_update_interval": "À quelle fréquence vérifier les changements de nom d'appareil (minutes). Par défaut : 5 min.",
+          "new_devices_check_interval": "À quelle fréquence rechercher de nouveaux appareils ajoutés (minutes). Par défaut : 15 min."
+        }
+      },
+      "mqtt_options": {
+        "title": "Options d'interrogation MQTT",
         "data": {
           "polling_enabled": "Activer l'interrogation périodique",
           "poll_interval": "Intervalle d'interrogation"

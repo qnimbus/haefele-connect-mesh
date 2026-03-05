@@ -45,6 +45,12 @@ from .const import (
     MIN_POLL_INTERVAL,
     CONF_POLLING_ENABLED,
     DEFAULT_POLLING_ENABLED,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
+    DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
+    CONF_NEW_DEVICES_CHECK_INTERVAL,
+    DEFAULT_NEW_DEVICES_CHECK_INTERVAL,
 )
 from .api.client import HafeleClient
 from .exceptions import HafeleAPIError
@@ -399,7 +405,92 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage polling options."""
+        """Route to the appropriate options step based on connection type."""
+        if self._entry.data.get(CONF_CONNECTION_TYPE) == CONNECTION_TYPE_CLOUD:
+            return await self.async_step_cloud_options(user_input)
+        return await self.async_step_mqtt_options(user_input)
+
+    async def async_step_cloud_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage cloud polling intervals."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                    CONF_DEVICE_DETAILS_UPDATE_INTERVAL: int(
+                        user_input[CONF_DEVICE_DETAILS_UPDATE_INTERVAL]
+                    ),
+                    CONF_NEW_DEVICES_CHECK_INTERVAL: int(
+                        user_input[CONF_NEW_DEVICES_CHECK_INTERVAL]
+                    ),
+                },
+            )
+
+        current_scan = self._entry.options.get(
+            CONF_SCAN_INTERVAL,
+            self._entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
+        current_details = self._entry.options.get(
+            CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
+            self._entry.data.get(
+                CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
+                DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
+            ),
+        )
+        current_new_devices = self._entry.options.get(
+            CONF_NEW_DEVICES_CHECK_INTERVAL,
+            self._entry.data.get(
+                CONF_NEW_DEVICES_CHECK_INTERVAL, DEFAULT_NEW_DEVICES_CHECK_INTERVAL
+            ),
+        )
+
+        return self.async_show_form(
+            step_id="cloud_options",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SCAN_INTERVAL, default=current_scan
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=10,
+                            max=300,
+                            step=5,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_DEVICE_DETAILS_UPDATE_INTERVAL, default=current_details
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=1,
+                            max=60,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="min",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_NEW_DEVICES_CHECK_INTERVAL, default=current_new_devices
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=1,
+                            max=60,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="min",
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_mqtt_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage MQTT polling options."""
         if user_input is not None:
             poll_interval = max(MIN_POLL_INTERVAL, int(user_input[CONF_POLL_INTERVAL]))
             return self.async_create_entry(
@@ -421,7 +512,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         return self.async_show_form(
-            step_id="init",
+            step_id="mqtt_options",
             data_schema=vol.Schema(
                 {
                     vol.Required(

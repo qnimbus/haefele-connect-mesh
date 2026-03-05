@@ -73,8 +73,21 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Pollingopties",
+      "cloud_options": {
+        "title": "Cloud polling-intervallen",
+        "data": {
+          "scan_interval": "Statuspollinginterval",
+          "device_details_update_interval": "Verversingsinterval apparaatgegevens",
+          "new_devices_check_interval": "Controle-interval nieuwe apparaten"
+        },
+        "data_description": {
+          "scan_interval": "Hoe vaak de apparaatstatus wordt opgevraagd bij de cloud-API (seconden). Standaard: 30 s.",
+          "device_details_update_interval": "Hoe vaak apparaatnaamwijzigingen worden gecontroleerd (minuten). Standaard: 5 min.",
+          "new_devices_check_interval": "Hoe vaak wordt gecontroleerd op nieuw toegevoegde apparaten (minuten). Standaard: 15 min."
+        }
+      },
+      "mqtt_options": {
+        "title": "MQTT-pollingopties",
         "data": {
           "polling_enabled": "Periodiek pollen inschakelen",
           "poll_interval": "Pollinginterval"

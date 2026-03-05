@@ -83,8 +83,21 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Polling Options",
+      "cloud_options": {
+        "title": "Cloud Polling Intervals",
+        "data": {
+          "scan_interval": "State poll interval",
+          "device_details_update_interval": "Device details refresh interval",
+          "new_devices_check_interval": "New devices check interval"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll device state from the cloud API (seconds). Default: 30 s.",
+          "device_details_update_interval": "How often to check for device name changes (minutes). Default: 5 min.",
+          "new_devices_check_interval": "How often to check for newly added devices (minutes). Default: 15 min."
+        }
+      },
+      "mqtt_options": {
+        "title": "MQTT Polling Options",
         "data": {
           "polling_enabled": "Enable periodic polling",
           "poll_interval": "Polling interval"

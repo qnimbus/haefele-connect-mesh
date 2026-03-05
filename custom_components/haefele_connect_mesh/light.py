@@ -134,6 +134,7 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
             model=model,
             sw_version=sw_version,
             via_device=(DOMAIN, gateway_id) if gateway_id else None,
+            suggested_area=getattr(self._device, "location", None) or None,
         )
 
     @property

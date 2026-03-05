@@ -86,6 +86,7 @@ class HaefeleUpdateSuccessSensor(CoordinatorEntity, BinarySensorEntity):
             model=model,
             sw_version=getattr(self._device, "bootloader_version", None),
             via_device=(DOMAIN, gateway_id) if gateway_id else None,
+            suggested_area=getattr(self._device, "location", None) or None,
         )
 
     @property

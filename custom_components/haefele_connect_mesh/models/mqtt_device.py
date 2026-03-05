@@ -19,6 +19,7 @@ class MQTTDevice:
     device_name: str
     device_addr: int
     device_types: list[str]
+    location: str = ""
     _last_updated: datetime = field(
         default_factory=lambda: datetime.now(UTC), repr=False
     )

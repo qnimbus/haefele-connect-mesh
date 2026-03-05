@@ -288,6 +288,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         device_name=item["device_name"],
                         device_addr=item["device_addr"],
                         device_types=item.get("device_types", ["light"]),
+                        location=item.get("location", ""),
                     )
                     discovered_devices.append(device)
                     _LOGGER.debug(
@@ -305,6 +306,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     device_name=payload["device_name"],
                     device_addr=payload["device_addr"],
                     device_types=payload.get("device_types", ["light"]),
+                    location=payload.get("location", ""),
                 )
                 discovered_devices.append(device)
                 _LOGGER.debug(
@@ -397,7 +399,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if isinstance(coordinator, HafeleMQTTCoordinator):
             await coordinator.async_unsubscribe()
         else:
-            coordinator.async_shutdown()
+            await coordinator.async_shutdown()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
