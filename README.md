@@ -1,5 +1,5 @@
 # Häfele Connect Mesh Integration for Home Assistant
- 
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration) ![GitHub Release](https://img.shields.io/github/v/release/QNimbus/haefele-connect-mesh)
 
 [![Validate](https://github.com/QNimbus/haefele-connect-mesh/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/QNimbus/haefele-connect-mesh/actions/workflows/validate.yml)
@@ -8,14 +8,6 @@
 ![Häfele](./custom_components/haefele_connect_mesh/logo/icon.png)
 
 A Home Assistant custom integration for Häfele Connect Mesh devices. This integration allows you to control Häfele smart devices through Home Assistant.
-
-## Update (04-12-2024) 🎊
-
-I'm excited to share some great news regarding the Häfele Connect Mesh integration! Recently, I had the opportunity to connect with Häfele, and I'm delighted to report that they are not only aware of this project but are also highly supportive of Open Source Initiative (OSI) principles and open-source development as a whole. Häfele recognizes the importance of community-driven platforms like Home Assistant and is eager to see seamless integrations that benefit both their customers and the broader open-source community.
-
-To support the development and testing of this integration, Häfele has generously provided me with a selection of their hardware. This will enable me to expand the capabilities of the Häfele Home Assistant integration and ensure broader compatibility with their product lineup.
-
-You can expect to see more features, enhanced stability, and support for additional Häfele devices in the coming months as I put this hardware to work. Stay tuned for updates!
 
 ## Update (03-2025): Local MQTT Mode
 
@@ -27,6 +19,14 @@ You can choose between two MQTT connection options:
 - **Connect directly to a broker** — point the integration at any MQTT broker (hostname, port, and optional credentials) that your gateway publishes to.
 
 Once set up, devices are discovered automatically from the gateway's MQTT topics. Device states are kept up to date via a configurable periodic poll (default: every 60 seconds, minimum: 10 seconds). The polling interval can be changed at any time via the **Configure** button on the integration card — no need to re-add the integration.
+
+## Update (04-12-2024) 🎊
+
+I'm excited to share some great news regarding the Häfele Connect Mesh integration! Recently, I had the opportunity to connect with Häfele, and I'm delighted to report that they are not only aware of this project but are also highly supportive of Open Source Initiative (OSI) principles and open-source development as a whole. Häfele recognizes the importance of community-driven platforms like Home Assistant and is eager to see seamless integrations that benefit both their customers and the broader open-source community.
+
+To support the development and testing of this integration, Häfele has generously provided me with a selection of their hardware. This will enable me to expand the capabilities of the Häfele Home Assistant integration and ensure broader compatibility with their product lineup.
+
+You can expect to see more features, enhanced stability, and support for additional Häfele devices in the coming months as I put this hardware to work. Stay tuned for updates!
 
 ## Supported Devices
 
