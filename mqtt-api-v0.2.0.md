@@ -43,7 +43,14 @@ Published once when the gateway comes online. Lists all known light devices.
 | `device_addr` | integer | BLE mesh address |
 | `device_types` | `string[]` | Capabilities: `"light"`, `"multiwhite"`, `"rgb"` |
 
-> **Note for this integration:** The current code reads `item["name"]` and `item["addr"]` but the API uses `device_name` and `device_addr`. See bug in `__init__.py` `_on_discovery`.
+**`device_types` observed values (live gateway, capitalised — NOT lowercase as documented):**
+
+| Value | Meaning |
+|---|---|
+| `"Light"` | Controllable light node — create HA entity |
+| `"Switch"` | Physical switch / remote / sensor node — input-only, no HA entity needed |
+
+> The AsyncAPI spec shows lowercase type strings, but the real gateway sends capitalised values (`"Light"`, `"Switch"`). Case-insensitive matching required.
 
 ---
 
@@ -100,6 +107,8 @@ Lists all configured scenes.
 Real-time state updates for a specific device. Payload is one of the status objects below.
 
 > **Field name note (confirmed from cross-reference):** Device status uses `"onoff"` (lowercase) with **numeric** values `1` (on) / `0` (off), not the camelCase `"onOff"` shown in the AsyncAPI spec. Group status uses `"onOff"` (camelCase) with string values `"on"`/`"off"`. Our `_normalize` checks for `"onoff"` which is correct for device status.
+
+> **CRITICAL behaviour observed (live testing):** The status topic is **only published in response to explicit `powerGet`/`lightnessGet` commands**. It is **NOT published on physical state changes** (wall switch, remote toggle, dimmer). Physical changes arrive exclusively on `{gateway_topic}/rawMessage` as BLE Mesh Set Unack messages. Do not rely on this topic alone for push-based state tracking.
 
 ### `{gateway_topic}/groups/{group_name}/status`
 
@@ -336,19 +345,79 @@ Send a raw BLE Mesh Access Message:
 
 ### `{gateway_topic}/rawMessage` (RECEIVE)
 
-Receive raw BLE Mesh Access Messages from devices:
+The gateway relays **every** BLE Mesh Access Message it receives to this topic. This is the **primary push channel** for physical state changes — wall switches, remotes, and dimmers publish Set Unack messages here immediately when the user acts, with no corresponding status-topic update.
 
 ```json
 {
-  "source": "0x3039",
+  "source": "0x7FFC",
   "destination": "0xC000",
-  "opcode": "0x8101",
-  "payload": "0000",
+  "opcode": "008203",
+  "payload": "0100",
   "sequence_number": 42,
   "ttl": 5,
   "rssi": -65
 }
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `source` | string | BLE address of the originating device as a hex string (`"7FFC"` or `"0x7FFC"`) |
+| `destination` | string | BLE destination address (hex) |
+| `opcode` | string | 6-char uppercase hex string (see table below). May include `0x` prefix. |
+| `payload` | string | Hex-encoded BLE Mesh message body |
+| `sequence_number` | integer | BLE Mesh sequence counter — use to deduplicate mesh retransmits |
+| `ttl` | integer | Time-to-live remaining hops |
+| `rssi` | integer | Received signal strength (dBm) |
+
+> **Source address:** The `source` field is always a **hex string**, not a decimal integer. However, `device_addr` in the discovery payload is a **decimal integer**. Convert `source` hex → int for coordinator lookup.
+
+> **Retransmit deduplication:** BLE Mesh retransmits the same Set Unack message 2–3 times within ~100 ms. Use `(source, sequence_number)` as a dedup key to process each logical event only once.
+
+> **Periodic keep-alive traffic:** The gateway publishes `rawMessage` approximately every 14 s for health/keep-alive traffic regardless of user activity. Filter by opcode — only process the opcodes listed below.
+
+#### Opcode Reference (BLE Mesh → Gateway encoding)
+
+The gateway encodes BLE Mesh opcodes as **6-char uppercase hex strings** with a `00` company-ID prefix followed by the 4-char SIG opcode. Example: SIG opcode `0x8203` → gateway string `"008203"`.
+
+| Gateway opcode | BLE Mesh opcode | Model | Direction | Payload layout |
+|---|---|---|---|---|
+| `008201` | 0x8201 | Generic OnOff | Get (HA → device) | none |
+| `008202` | 0x8202 | Generic OnOff | Set Ack (HA → device) | `[OnOff u8][TID u8][TransTime?][Delay?]` |
+| **`008203`** | **0x8203** | **Generic OnOff** | **Set Unack (device → gw, physical change)** | `[OnOff u8][TID u8][TransTime?][Delay?]` |
+| `008204` | 0x8204 | Generic OnOff | Status (device → gw, response to Get) | `[PresentOnOff u8][TargetOnOff?][RemTime?]` |
+| `00824B` | 0x824B | Light Lightness | Get (HA → device) | none |
+| `00824C` | 0x824C | Light Lightness | Set Ack (HA → device) | `[Lightness u16LE][TID u8]…` |
+| **`00824D`** | **0x824D** | **Light Lightness** | **Set Unack (device → gw, physical change)** | `[Lightness u16LE][TID u8]…` |
+| `00824E` | 0x824E | Light Lightness | Status (device → gw, response to Get) | `[PresentLightness u16LE][TargetLightness?]…` |
+| `008262` | 0x8262 | Light CTL | Set Unack (physical / command) | `[Lightness u16LE][Temp u16LE Kelvin][DeltaUV i16LE][TID u8]…` |
+| `008263` | 0x8263 | Light CTL | Status (response to Get) | `[Lightness u16LE][Temp u16LE Kelvin]…` |
+| `008278` | 0x8278 | Light HSL | Set Unack (physical / command) | `[Lightness u16LE][Hue u16LE][Sat u16LE][TID u8]…` |
+| `008279` | 0x8279 | Light HSL | Status (response to Get) | `[Lightness u16LE][Hue u16LE][Sat u16LE]…` |
+
+**Opcodes verified by live observation:**
+- `008203` — seen from device addr `0x7FFC` ("Hal beneden") on physical wall-switch toggle
+- `00824D` — seen from same device during physical dimming
+
+**Payload decoding rules:**
+
+| Model | Fields | Notes |
+|---|---|---|
+| Generic OnOff | `payload[0]` = OnOff (0/1) | TID at byte 1, ignored |
+| Light Lightness | `payload[0:2]` = Lightness uint16 LE (0–65535) | TID at byte 2, ignored |
+| Light CTL | `payload[0:2]` = Lightness uint16 LE; `payload[2:4]` = Temperature uint16 LE (Kelvin, direct value) | DeltaUV at bytes 4–5 (usually 0) |
+| Light HSL | `payload[0:2]` = Lightness uint16 LE; `payload[2:4]` = Hue uint16 LE (0–65535 → 0–360°); `payload[4:6]` = Saturation uint16 LE (0–65535 → 0.0–1.0) | |
+
+**Scale conversions from rawMessage payload values:**
+
+| Parameter | Raw (payload) | HA internal scale | Notes |
+|---|---|---|---|
+| OnOff | 0/1 byte | `bool` | |
+| Lightness | 0–65535 uint16 LE | 0–65535 mesh scale | Convert to HA 0–255 via `value_to_brightness(BRIGHTNESS_SCALE_MESH, v)` |
+| Temperature (CTL) | uint16 LE **Kelvin** (direct, NOT mesh-scaled) | 0–65535 via `(K − 2000) / 4500 × 65535` | Clamp to 2000–6500 K before converting |
+| Hue (HSL) | 0–65535 uint16 LE | degrees: `v / 65535 × 360` | |
+| Saturation (HSL) | 0–65535 uint16 LE | ratio: `v / 65535` | |
+
+> **Temperature note:** CTL payload bytes 2–3 carry the colour temperature directly in **Kelvin** as a uint16 LE. This differs from lightness/hue/saturation which use the full 0–65535 mesh range. The value must be clamped to the integration's supported range (2000–6500 K) before converting to the internal 0–65535 scale.
 
 ---
 
@@ -367,14 +436,35 @@ Due to BLE Mesh resolution limits, values are rounded down to the nearest suppor
 
 ---
 
-## Key Field Name Corrections (vs. Current Integration Code)
+## Field Name Reference (Discovery Payload)
 
-The current `_on_discovery` handler in `__init__.py` uses incorrect field names:
+The discovery payload uses verbose field names. Confirmed correct names (bugs in early integration code used wrong names — all fixed):
 
-| Code uses | API actually sends |
-|---|---|
-| `item["name"]` | `item["device_name"]` |
-| `item["addr"]` | `item["device_addr"]` |
-| `item.get("types", ...)` | `item["device_types"]` |
+| Field | Type | Notes |
+|---|---|---|
+| `device_name` | string | Human-readable name. Used verbatim in status/command topic paths (spaces are literal, not URL-encoded). |
+| `device_addr` | **integer** | BLE mesh address as a **decimal integer** (e.g. `32764`). Use as `int`. |
+| `device_types` | `string[]` | Capability list. Gateway sends **capitalised** values (`"Light"`, `"Switch"`), not lowercase as documented. Use case-insensitive matching. |
+| `location` | string | Room/area name. Used to auto-assign HA areas. |
 
-This causes all 11 discovered devices to be skipped with `KeyError: 'name'`.
+> **Topic paths use literal device names:** MQTT topic paths such as `hafele/lights/Hal beneden/status` contain the literal `device_name` string including spaces. Do **not** URL-encode device names in topic strings.
+
+## Integration Implementation Notes
+
+Accumulated findings from live testing against a real Häfele Connect Mesh gateway:
+
+1. **Status topic is response-only.** `hafele/lights/{name}/status` is published only when the gateway responds to a `powerGet`/`lightnessGet` command. Physical toggles do NOT trigger it.
+
+2. **rawMessage is the true push channel.** Subscribe to `{prefix}/rawMessage` and decode BLE Mesh opcodes (see above) for real-time physical state changes.
+
+3. **Deduplicate by (source, sequence_number).** BLE Mesh retransmits the same event 2–3 times. A simple set of `(int(source_hex, 16), sequence_number)` tuples prevents duplicate state updates.
+
+4. **device_types values are capitalised.** Real gateway sends `"Light"` and `"Switch"`, not `"light"` and `"switch"`.
+
+5. **Bare `on`/`off` power payloads are rejected.** The gateway JSON-parses all command payloads. Send `true`/`false` (JSON booleans) or `"on"`/`"off"` (quoted JSON strings). Bare `on` is invalid JSON and silently ignored.
+
+6. **Status topic field is `onoff` (lowercase).** Device status uses `{"onoff": 1}` (lowercase key, integer value), not `{"onOff": "on"}` (which is the group-status format).
+
+7. **URL-encoding device names breaks subscriptions.** Topic subscriptions must use literal device names. `hafele/lights/Hal%20beneden/status` will never receive messages; `hafele/lights/Hal beneden/status` is correct.
+
+8. **Keep-alive rawMessage traffic.** The gateway sends periodic `rawMessage` broadcasts (~every 14 s) unrelated to device state. Filter by opcode to avoid spurious state updates.

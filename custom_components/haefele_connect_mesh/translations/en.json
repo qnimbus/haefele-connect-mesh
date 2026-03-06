@@ -14,15 +14,11 @@
         "title": "Configure Local MQTT",
         "data": {
           "use_ha_mqtt": "Use Home Assistant MQTT",
-          "topic_prefix": "MQTT topic prefix",
-          "polling_enabled": "Enable periodic polling",
-          "poll_interval": "Polling interval"
+          "topic_prefix": "MQTT topic prefix"
         },
         "data_description": {
           "use_ha_mqtt": "Use the MQTT broker configured in Home Assistant. Disable to connect to a different broker.",
-          "topic_prefix": "The MQTT topic prefix configured in your Häfele Gateway (default: hafele)",
-          "polling_enabled": "Periodically request device state via MQTT. Recommended as a fallback for missed push updates.",
-          "poll_interval": "How often to actively poll device state (seconds). Minimum 10 s."
+          "topic_prefix": "The MQTT topic prefix configured in your Häfele Gateway (default: hafele)"
         }
       },
       "mqtt_broker": {
@@ -97,15 +93,7 @@
         }
       },
       "mqtt_options": {
-        "title": "MQTT Polling Options",
-        "data": {
-          "polling_enabled": "Enable periodic polling",
-          "poll_interval": "Polling interval"
-        },
-        "data_description": {
-          "polling_enabled": "Periodically request device state via MQTT. Recommended as a fallback for missed push updates.",
-          "poll_interval": "How often to actively poll device state (seconds). Minimum 10 s."
-        }
+        "title": "MQTT Options"
       }
     }
   },

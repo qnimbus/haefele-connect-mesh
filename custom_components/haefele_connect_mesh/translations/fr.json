@@ -14,15 +14,11 @@
         "title": "Configurer le MQTT local",
         "data": {
           "use_ha_mqtt": "Utiliser le MQTT de Home Assistant",
-          "topic_prefix": "Préfixe de sujet MQTT",
-          "polling_enabled": "Activer l'interrogation périodique",
-          "poll_interval": "Intervalle d'interrogation"
+          "topic_prefix": "Préfixe de sujet MQTT"
         },
         "data_description": {
           "use_ha_mqtt": "Utiliser le courtier MQTT configuré dans Home Assistant. Désactivez pour vous connecter à un autre courtier.",
-          "topic_prefix": "Le préfixe de sujet MQTT configuré dans votre passerelle Häfele (par défaut : hafele)",
-          "polling_enabled": "Demander périodiquement l'état de l'appareil via MQTT. Recommandé comme solution de secours pour les mises à jour push manquées.",
-          "poll_interval": "À quelle fréquence interroger activement l'état de l'appareil (secondes). Minimum 10 s."
+          "topic_prefix": "Le préfixe de sujet MQTT configuré dans votre passerelle Häfele (par défaut : hafele)"
         }
       },
       "mqtt_broker": {
@@ -87,15 +83,7 @@
         }
       },
       "mqtt_options": {
-        "title": "Options d'interrogation MQTT",
-        "data": {
-          "polling_enabled": "Activer l'interrogation périodique",
-          "poll_interval": "Intervalle d'interrogation"
-        },
-        "data_description": {
-          "polling_enabled": "Demander périodiquement l'état de l'appareil via MQTT. Recommandé comme solution de secours pour les mises à jour push manquées.",
-          "poll_interval": "À quelle fréquence interroger activement l'état de l'appareil (secondes). Minimum 10 s."
-        }
+        "title": "Options MQTT"
       }
     }
   },

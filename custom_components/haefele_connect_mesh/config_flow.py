@@ -40,11 +40,6 @@ from .const import (
     CONF_MQTT_USERNAME,
     CONF_MQTT_PASSWORD,
     DEFAULT_MQTT_PORT,
-    CONF_POLL_INTERVAL,
-    DEFAULT_POLL_INTERVAL,
-    MIN_POLL_INTERVAL,
-    CONF_POLLING_ENABLED,
-    DEFAULT_POLLING_ENABLED,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
@@ -73,8 +68,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._api_token: str | None = None
         self._networks: list[dict] | None = None
         self._mqtt_topic_prefix: str | None = None
-        self._polling_enabled: bool = DEFAULT_POLLING_ENABLED
-        self._poll_interval: int = DEFAULT_POLL_INTERVAL
         self._reauth_entry = None
 
     # ------------------------------------------------------------------
@@ -122,8 +115,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             use_ha = user_input[CONF_MQTT_USE_HA]
             self._mqtt_topic_prefix = user_input[CONF_MQTT_TOPIC_PREFIX]
-            self._polling_enabled = user_input[CONF_POLLING_ENABLED]
-            self._poll_interval = max(MIN_POLL_INTERVAL, int(user_input[CONF_POLL_INTERVAL]))
 
             if use_ha:
                 if not ha_mqtt_available:
@@ -137,8 +128,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_CONNECTION_TYPE: CONNECTION_TYPE_MQTT,
                             CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
                             CONF_MQTT_USE_HA: True,
-                            CONF_POLLING_ENABLED: self._polling_enabled,
-                            CONF_POLL_INTERVAL: self._poll_interval,
                         },
                     )
             else:
@@ -154,20 +143,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_MQTT_TOPIC_PREFIX, default=DEFAULT_MQTT_TOPIC_PREFIX
                     ): str,
-                    vol.Required(
-                        CONF_POLLING_ENABLED, default=DEFAULT_POLLING_ENABLED
-                    ): BooleanSelector(),
-                    vol.Required(
-                        CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_POLL_INTERVAL,
-                            max=3600,
-                            step=5,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
                 }
             ),
             errors=errors,
@@ -196,8 +171,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MQTT_PORT: user_input[CONF_MQTT_PORT],
                     CONF_MQTT_USERNAME: user_input.get(CONF_MQTT_USERNAME, ""),
                     CONF_MQTT_PASSWORD: user_input.get(CONF_MQTT_PASSWORD, ""),
-                    CONF_POLLING_ENABLED: self._polling_enabled,
-                    CONF_POLL_INTERVAL: self._poll_interval,
                 },
             )
 
@@ -408,7 +381,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Route to the appropriate options step based on connection type."""
         if self._entry.data.get(CONF_CONNECTION_TYPE) == CONNECTION_TYPE_CLOUD:
             return await self.async_step_cloud_options(user_input)
-        return await self.async_step_mqtt_options(user_input)
+        # MQTT is pure push — no options to configure
+        return self.async_create_entry(title="", data={})
 
     async def async_step_cloud_options(
         self, user_input: dict[str, Any] | None = None
@@ -487,48 +461,3 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ),
         )
 
-    async def async_step_mqtt_options(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage MQTT polling options."""
-        if user_input is not None:
-            poll_interval = max(MIN_POLL_INTERVAL, int(user_input[CONF_POLL_INTERVAL]))
-            return self.async_create_entry(
-                title="",
-                data={
-                    CONF_POLLING_ENABLED: user_input[CONF_POLLING_ENABLED],
-                    CONF_POLL_INTERVAL: poll_interval,
-                },
-            )
-
-        # Pre-populate from current options, falling back to entry data
-        current_polling_enabled = self._entry.options.get(
-            CONF_POLLING_ENABLED,
-            self._entry.data.get(CONF_POLLING_ENABLED, DEFAULT_POLLING_ENABLED),
-        )
-        current_poll_interval = self._entry.options.get(
-            CONF_POLL_INTERVAL,
-            self._entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
-        )
-
-        return self.async_show_form(
-            step_id="mqtt_options",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_POLLING_ENABLED, default=current_polling_enabled
-                    ): BooleanSelector(),
-                    vol.Required(
-                        CONF_POLL_INTERVAL, default=current_poll_interval
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_POLL_INTERVAL,
-                            max=3600,
-                            step=5,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                }
-            ),
-        )

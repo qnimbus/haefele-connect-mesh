@@ -60,10 +60,6 @@ class HaefeleUpdateSuccessSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_entity_registry_enabled_default = False
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    async def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        return super()._handle_coordinator_update()
-
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""

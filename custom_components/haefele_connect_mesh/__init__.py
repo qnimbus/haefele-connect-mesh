@@ -36,10 +36,6 @@ from .const import (
     CONF_MQTT_PORT,
     CONF_MQTT_USERNAME,
     CONF_MQTT_PASSWORD,
-    CONF_POLL_INTERVAL,
-    DEFAULT_POLL_INTERVAL,
-    CONF_POLLING_ENABLED,
-    DEFAULT_POLLING_ENABLED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,32 +64,6 @@ CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 # Timeout (seconds) to wait for device discovery via MQTT
 _MQTT_DISCOVERY_TIMEOUT = 10
-
-
-async def _rotational_poll_loop(
-    hass: HomeAssistant,
-    coordinators: dict,
-    poll_interval: int,
-) -> None:
-    """Poll each MQTT device in rotation, spacing polls evenly within poll_interval."""
-    try:
-        # Immediate burst on startup so all devices become available right away.
-        for coordinator in list(coordinators.values()):
-            hass.async_create_task(coordinator.async_request_state())
-
-        while True:
-            snapshot = list(coordinators.values())
-            num = len(snapshot)
-            if num == 0:
-                await asyncio.sleep(poll_interval)
-                continue
-            sleep_between = max(2.0, poll_interval / num)
-            for coordinator in snapshot:
-                # Fire-and-forget: do not await so the loop never blocks the event loop.
-                hass.async_create_task(coordinator.async_request_state())
-                await asyncio.sleep(sleep_between)
-    except asyncio.CancelledError:
-        pass
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -258,12 +228,6 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise ConfigEntryNotReady(str(err)) from err
 
     prefix = entry.data.get(CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
-    polling_enabled = bool(
-        entry.options.get(CONF_POLLING_ENABLED, entry.data.get(CONF_POLLING_ENABLED, DEFAULT_POLLING_ENABLED))
-    )
-    poll_interval = int(
-        entry.options.get(CONF_POLL_INTERVAL, entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
-    )
     discovery_topic = f"{prefix}/lights"
 
     # Collect discovered devices from the discovery topic
@@ -368,15 +332,99 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         direct_client=direct_client,
     )
 
-    if polling_enabled and coordinators:
-        poll_task = hass.async_create_background_task(
-            _rotational_poll_loop(hass, coordinators, poll_interval),
-            name="hafele_mqtt_rotational_poll",
-        )
-        async def _cancel_poll_task() -> None:
-            poll_task.cancel()
+    # Subscribe to hafele/rawMessage for BLE Mesh push updates.
+    # The gateway publishes Set Unack messages here when a physical device changes
+    # state (toggle, dim), giving us a true local_push update path.
+    if coordinators:
+        # Build reverse map: BLE device_addr (int) → coordinator
+        addr_to_coordinator: dict[int, HafeleMQTTCoordinator] = {
+            device.device_addr: coordinators[device.id]
+            for device in light_devices
+        }
 
-        entry.async_on_unload(_cancel_poll_task)
+        # Deduplication: track (source_addr, sequence_number) of recently seen messages
+        _seen_raw: set[tuple[int, int]] = set()
+
+        @callback
+        def _on_raw_message(msg) -> None:
+            try:
+                data = json.loads(msg.payload)
+            except (json.JSONDecodeError, TypeError):
+                return
+
+            # Parse source address — gateway sends hex string "7FFC" or "0x7FFC"
+            raw_source = data.get("source", "")
+            try:
+                if isinstance(raw_source, int):
+                    source_addr = raw_source
+                else:
+                    src_str = str(raw_source).strip()
+                    if src_str.startswith(("0x", "0X")):
+                        src_str = src_str[2:]
+                    source_addr = int(src_str, 16)
+            except (ValueError, TypeError):
+                return
+
+            # Deduplicate BLE mesh retransmits by (source, sequence_number)
+            seq_num = data.get("sequence_number", -1)
+            key = (source_addr, seq_num)
+            if key in _seen_raw:
+                return
+            _seen_raw.add(key)
+            if len(_seen_raw) > 100:
+                _seen_raw.clear()
+
+            # Normalize opcode early so we can log it in the fallback path
+            opcode = data.get("opcode", "").upper()
+            if opcode.startswith("0X"):
+                opcode = opcode[2:]
+            payload_hex = data.get("payload", "")
+
+            # Source lookup: covers Status responses (008204/00824E/…) where
+            # source = the light node that is replying to our Get command.
+            coordinator = addr_to_coordinator.get(source_addr)
+
+            # Destination fallback: covers Set Unack messages (008203/00824D/…)
+            # where a physical switch or remote is the source and the light is
+            # the destination. Parse destination with the same hex logic.
+            if coordinator is None:
+                raw_dest = data.get("destination", "")
+                try:
+                    if isinstance(raw_dest, int):
+                        dest_addr = raw_dest
+                    else:
+                        dest_str = str(raw_dest).strip()
+                        if dest_str.startswith(("0x", "0X")):
+                            dest_str = dest_str[2:]
+                        dest_addr = int(dest_str, 16)
+                    coordinator = addr_to_coordinator.get(dest_addr)
+                except (ValueError, TypeError):
+                    pass
+
+            if coordinator is None:
+                _LOGGER.debug(
+                    "rawMessage ignored: src=0x%s opcode=%s (no coordinator for source or destination)",
+                    data.get("source", "?"), opcode,
+                )
+                return
+
+            coordinator.handle_raw_message(opcode, payload_hex)
+
+        raw_topic = f"{prefix}/rawMessage"
+        if direct_client:
+            unsubscribe_raw = await direct_client.async_subscribe(raw_topic, _on_raw_message)
+        else:
+            unsubscribe_raw = await ha_mqtt.async_subscribe(hass, raw_topic, _on_raw_message, qos=0)
+
+        async def _unsub_raw() -> None:
+            unsubscribe_raw()
+
+        entry.async_on_unload(_unsub_raw)
+
+        # Initial burst: request state from all devices so they become available
+        # immediately without waiting for a physical event.
+        for coordinator in coordinators.values():
+            hass.async_create_task(coordinator.async_request_state())
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

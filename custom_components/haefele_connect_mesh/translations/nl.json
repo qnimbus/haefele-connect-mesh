@@ -14,15 +14,11 @@
         "title": "Lokale MQTT configureren",
         "data": {
           "use_ha_mqtt": "Home Assistant MQTT gebruiken",
-          "topic_prefix": "MQTT-onderwerpprefix",
-          "polling_enabled": "Periodiek pollen inschakelen",
-          "poll_interval": "Pollinginterval"
+          "topic_prefix": "MQTT-onderwerpprefix"
         },
         "data_description": {
           "use_ha_mqtt": "De in Home Assistant geconfigureerde MQTT-broker gebruiken. Schakel uit om verbinding te maken met een andere broker.",
-          "topic_prefix": "Het MQTT-onderwerpprefix dat is geconfigureerd in uw Häfele Gateway (standaard: hafele)",
-          "polling_enabled": "Periodiek apparaatstatus opvragen via MQTT. Aanbevolen als terugval voor gemiste push-updates.",
-          "poll_interval": "Hoe vaak de apparaatstatus actief wordt opgevraagd (seconden). Minimaal 10 s."
+          "topic_prefix": "Het MQTT-onderwerpprefix dat is geconfigureerd in uw Häfele Gateway (standaard: hafele)"
         }
       },
       "mqtt_broker": {
@@ -87,15 +83,7 @@
         }
       },
       "mqtt_options": {
-        "title": "MQTT-pollingopties",
-        "data": {
-          "polling_enabled": "Periodiek pollen inschakelen",
-          "poll_interval": "Pollinginterval"
-        },
-        "data_description": {
-          "polling_enabled": "Periodiek apparaatstatus opvragen via MQTT. Aanbevolen als terugval voor gemiste push-updates.",
-          "poll_interval": "Hoe vaak de apparaatstatus actief wordt opgevraagd (seconden). Minimaal 10 s."
-        }
+        "title": "MQTT-opties"
       }
     }
   },

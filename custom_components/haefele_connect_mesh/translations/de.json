@@ -14,15 +14,11 @@
         "title": "Lokales MQTT konfigurieren",
         "data": {
           "use_ha_mqtt": "Home Assistant MQTT verwenden",
-          "topic_prefix": "MQTT-Topic-Präfix",
-          "polling_enabled": "Regelmäßige Abfrage aktivieren",
-          "poll_interval": "Abfrageintervall"
+          "topic_prefix": "MQTT-Topic-Präfix"
         },
         "data_description": {
           "use_ha_mqtt": "Den in Home Assistant konfigurierten MQTT-Broker verwenden. Deaktivieren, um einen anderen Broker zu verbinden.",
-          "topic_prefix": "Das in Ihrem Häfele Gateway konfigurierte MQTT-Topic-Präfix (Standard: hafele)",
-          "polling_enabled": "Gerätestatus regelmäßig per MQTT abfragen. Empfohlen als Fallback für verpasste Push-Aktualisierungen.",
-          "poll_interval": "Wie oft der Gerätestatus aktiv abgefragt wird (Sekunden). Mindestens 10 s."
+          "topic_prefix": "Das in Ihrem Häfele Gateway konfigurierte MQTT-Topic-Präfix (Standard: hafele)"
         }
       },
       "mqtt_broker": {
@@ -87,15 +83,7 @@
         }
       },
       "mqtt_options": {
-        "title": "MQTT-Abfrageoptionen",
-        "data": {
-          "polling_enabled": "Regelmäßige Abfrage aktivieren",
-          "poll_interval": "Abfrageintervall"
-        },
-        "data_description": {
-          "polling_enabled": "Gerätestatus regelmäßig per MQTT abfragen. Empfohlen als Fallback für verpasste Push-Aktualisierungen.",
-          "poll_interval": "Wie oft der Gerätestatus aktiv abgefragt wird (Sekunden). Mindestens 10 s."
-        }
+        "title": "MQTT-Optionen"
       }
     }
   },

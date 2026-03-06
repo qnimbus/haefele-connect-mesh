@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 from datetime import datetime, UTC
@@ -46,8 +45,6 @@ from .models.mqtt_device import MQTTDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-# Freshness limit for MQTT devices (push-based; 10 minutes)
-_MQTT_FRESHNESS_SECONDS = 600
 # Freshness limit for cloud devices (polled every 30 s; 2 minutes)
 _CLOUD_FRESHNESS_SECONDS = 120
 
@@ -102,12 +99,12 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        state = (self.coordinator.data or {}).get("state", {})
         _LOGGER.debug(
-            "Coordinator update for %s: Raw Data=%s, Is On=%s, Brightness=%s",
+            "State update for %s: power=%s lightness=%s",
             self.entity_id or self._device.name,
-            self.coordinator.data,
-            self.is_on,
-            self.brightness,
+            state.get("power"),
+            state.get("lightness"),
         )
         super()._handle_coordinator_update()
 
@@ -143,28 +140,21 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         if not self.coordinator.last_update_success:
             return False
 
-        freshness = (
-            _MQTT_FRESHNESS_SECONDS
-            if isinstance(self._device, MQTTDevice)
-            else _CLOUD_FRESHNESS_SECONDS
-        )
+        state = (self.coordinator.data or {}).get("state")
+        if not isinstance(state, dict):
+            return False
 
-        is_available = (
-            self.coordinator.data is not None
-            and isinstance(self.coordinator.data.get("state"), dict)
-            and "power" in self.coordinator.data["state"]
-            and "lightness" in self.coordinator.data["state"]
-            and (datetime.now(UTC) - self._device.last_updated).total_seconds()
-            < freshness
-        )
+        has_data = "power" in state and "lightness" in state
 
-        _LOGGER.debug(
-            "Availability check for %s: %s (Data: %s, Last Update: %s)",
-            self.entity_id or self._device.name,
-            is_available,
-            self.coordinator.data,
-            self._device.last_updated,
-        )
+        if isinstance(self._device, MQTTDevice):
+            # Push-based: no staleness check — a stable light that hasn't changed
+            # in a long time should not be reported as unavailable.
+            is_available = has_data
+        else:
+            is_available = has_data and (
+                datetime.now(UTC) - self._device.last_updated
+            ).total_seconds() < _CLOUD_FRESHNESS_SECONDS
+
         return is_available
 
     @property
@@ -172,9 +162,6 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         """Return true if light is on."""
         if not self.available:
             return None
-        _LOGGER.debug(
-            "Checking is_on for %s with data: %s", self.entity_id or self._device.name, self.coordinator.data
-        )
         return self.coordinator.data["state"]["power"]
 
     @property
@@ -272,10 +259,6 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
             self.coordinator.data = {"state": new_state}
             self.async_write_ha_state()
 
-            if hasattr(self.coordinator, "async_request_state"):
-                await asyncio.sleep(1.0)
-                await self.coordinator.async_request_state()
-
         except (ServiceValidationError, HomeAssistantError):
             raise
         except Exception as ex:
@@ -297,10 +280,6 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                 }
             }
             self.async_write_ha_state()
-
-            if hasattr(self.coordinator, "async_request_state"):
-                await asyncio.sleep(1.0)
-                await self.coordinator.async_request_state()
 
         except Exception as ex:
             _LOGGER.error("Failed to turn off light %s: %s", self.entity_id or self._device.name, str(ex))
