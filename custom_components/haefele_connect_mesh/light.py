@@ -51,6 +51,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Freshness limit for cloud devices (polled every 30 s; 2 minutes)
 _CLOUD_FRESHNESS_SECONDS = 120
+# Delay before querying actual brightness after a turn-on command with no
+# explicit brightness (device was off so lightness=0 at command time).
+_BRIGHTNESS_FETCH_DELAY = 0.5
 
 
 async def async_setup_entry(
@@ -293,7 +296,7 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                 and hasattr(self.coordinator, "async_request_state")
             ):
                 async def _fetch_brightness() -> None:
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(_BRIGHTNESS_FETCH_DELAY)
                     await self.coordinator.async_request_state()
                 self.hass.async_create_task(_fetch_brightness())
 
@@ -474,9 +477,19 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
                 new_state["lightness"] = round(lightness_frac * 65535)
             await self._publish("power", True)
             _LOGGER.debug("Group '%s' turn_on published", self._group.group_name)
+            fetch_needed = []
             for coordinator in self._coordinators:
                 current = (coordinator.data or {}).get("state", {})
                 coordinator.async_set_updated_data({"state": {**current, **new_state}})
+                if ATTR_BRIGHTNESS not in kwargs and current.get("lightness", 0) == 0:
+                    fetch_needed.append(coordinator)
+            if fetch_needed:
+                async def _fetch_group_brightness() -> None:
+                    await asyncio.sleep(_BRIGHTNESS_FETCH_DELAY)
+                    for coord in fetch_needed:
+                        await coord.async_request_state()
+                        await asyncio.sleep(0.1)
+                self.hass.async_create_task(_fetch_group_brightness())
         except Exception:
             _LOGGER.exception("Failed to turn on group '%s'", self._group.group_name)
             raise HomeAssistantError(f"Failed to turn on group {self._group.group_name}")

@@ -147,7 +147,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 v = float(raw)
                 # API delivers 0.0–1.0; convert to mesh 0–65535
                 result["lightness"] = round(v * 65535)
-                result["lastLightness"] = result["lightness"]
+                if result["lightness"] > 0:
+                    result["lastLightness"] = result["lightness"]
             except (ValueError, TypeError):
                 pass
 
