@@ -28,8 +28,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
-          file: .devcontainer/Dockerfile
+          context: .devcontainer
           push: true
           tags: ghcr.io/${{ github.repository }}/devcontainer:latest
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/devcontainer:cache
