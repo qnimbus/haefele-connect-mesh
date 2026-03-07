@@ -26,7 +26,6 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util.color import (
     value_to_brightness,
     brightness_to_value,
-    color_temperature_kelvin_to_mired,
 )
 from homeassistant.util.percentage import percentage_to_ranged_value
 
@@ -38,8 +37,6 @@ from .const import (
     BRIGHTNESS_SCALE_HA,
     MIN_KELVIN,
     MAX_KELVIN,
-    MIN_MIREDS,
-    MAX_MIREDS,
 )
 from .coordinator import HafeleUpdateCoordinator
 from .mqtt.coordinator import HafeleMQTTCoordinator
@@ -114,8 +111,8 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         elif device.supports_color_temp:
             self._attr_color_mode = ColorMode.COLOR_TEMP
             self._attr_supported_color_modes = {ColorMode.COLOR_TEMP}
-            self._attr_min_mireds = MIN_MIREDS
-            self._attr_max_mireds = MAX_MIREDS
+            self._attr_min_color_temp_kelvin = MIN_KELVIN
+            self._attr_max_color_temp_kelvin = MAX_KELVIN
         else:
             self._attr_color_mode = ColorMode.BRIGHTNESS
             self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
@@ -203,15 +200,14 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         return None
 
     @property
-    def color_temp(self) -> int | None:
-        """Return the color temperature in mireds."""
+    def color_temp_kelvin(self) -> int | None:
+        """Return the color temperature in Kelvin."""
         if not self.available or not self.is_on or not self._device.supports_color_temp:
             return None
 
         temperature = self.coordinator.data["state"].get("temperature")
         if temperature is not None:
-            kelvin = MIN_KELVIN + (temperature / 65535) * (MAX_KELVIN - MIN_KELVIN)
-            return color_temperature_kelvin_to_mired(kelvin)
+            return round(MIN_KELVIN + (temperature / 65535) * (MAX_KELVIN - MIN_KELVIN))
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
