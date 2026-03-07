@@ -1,9 +1,14 @@
 version: "3.8"
 services:
   devcontainer:
-    image: mcr.microsoft.com/devcontainers/python:3.13
+    image: ghcr.io/qnimbus/haefele-connect-mesh/devcontainer:latest
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     volumes:
       - ..:/workspaces/haefele-connect-mesh:cached
+      - pip-cache:/home/vscode/.cache/pip
+      - npm-cache:/home/vscode/.npm
     command: sleep infinity
 
   mosquitto:
@@ -18,3 +23,5 @@ services:
 
 volumes:
   mosquitto-data:
+  pip-cache:
+  npm-cache:
