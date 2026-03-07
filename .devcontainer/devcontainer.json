@@ -4,6 +4,7 @@
     "service": "devcontainer",
     "workspaceFolder": "/workspaces/haefele-connect-mesh",
     "postCreateCommand": "scripts/setup",
+    "postStartCommand": "scripts/setup-claude",
     "forwardPorts": [
         8123,
         1883
@@ -25,7 +26,8 @@
                 "github.vscode-pull-request-github",
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ryanluker.vscode-coverage-gutters"
+                "ryanluker.vscode-coverage-gutters",
+                "Anthropic.claude-code"
             ],
             "settings": {
                 "files.eol": "\n",
@@ -43,13 +45,5 @@
             }
         }
     },
-    "remoteUser": "vscode",
-    "features": {
-        "ghcr.io/devcontainers-extra/features/apt-packages:1": {
-            "packages": "ffmpeg,libturbojpeg0,libpcap-dev"
-        },
-        "ghcr.io/devcontainers/features/node:1": {
-            "version": "lts"
-        }
-    }
+    "remoteUser": "vscode"
 }
