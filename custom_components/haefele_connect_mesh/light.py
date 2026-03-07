@@ -6,6 +6,7 @@ import logging
 from typing import Any
 from datetime import datetime, UTC
 
+import asyncio
 import json
 
 from homeassistant.components.light import (
@@ -189,8 +190,12 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         if not self.available or not self.is_on:
             return None
 
-        lightness = self.coordinator.data["state"].get("lightness")
-        if lightness is not None:
+        state = self.coordinator.data["state"]
+        # Fall back to lastLightness when lightness is 0 — the gateway reports
+        # lightness: 0 while a device is off, so lastLightness preserves the
+        # value from the previous on-cycle across off periods and HA restarts.
+        lightness = state.get("lightness") or state.get("lastLightness")
+        if lightness:
             return value_to_brightness(BRIGHTNESS_SCALE_MESH, lightness)
         return None
 
@@ -277,6 +282,20 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
             # Optimistic update — reflects change before next poll/push
             self.coordinator.data = {"state": new_state}
             self.async_write_ha_state()
+
+            # When no brightness was specified and lightness is still 0 (device
+            # was off at HA startup so lightnessGet returned 0.0), schedule a
+            # delayed state fetch to learn the actual hardware brightness.
+            # Only applies to push-based coordinators (cloud self-corrects via poll).
+            if (
+                ATTR_BRIGHTNESS not in kwargs
+                and new_state.get("lightness", 0) == 0
+                and hasattr(self.coordinator, "async_request_state")
+            ):
+                async def _fetch_brightness() -> None:
+                    await asyncio.sleep(0.5)
+                    await self.coordinator.async_request_state()
+                self.hass.async_create_task(_fetch_brightness())
 
         except (ServiceValidationError, HomeAssistantError):
             raise
