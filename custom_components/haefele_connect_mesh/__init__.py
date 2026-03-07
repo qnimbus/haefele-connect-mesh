@@ -21,7 +21,7 @@ from homeassistant.helpers import device_registry as dr
 from .api.client import HafeleClient
 from .coordinator import HafeleUpdateCoordinator
 from .exceptions import HafeleAPIError
-from .mqtt.coordinator import HafeleMQTTCoordinator
+from .mqtt.coordinator import HafeleMQTTCoordinator, KNOWN_OPCODES as MQTT_KNOWN_OPCODES
 from .mqtt.direct_client import DirectMQTTClient
 from .models.mqtt_device import MQTTDevice
 from .const import (
@@ -46,6 +46,15 @@ PARALLEL_UPDATES = 0
 
 
 @dataclass
+class MQTTGroup:
+    """A Häfele Connect Mesh BLE group with its member device addresses."""
+
+    group_name: str
+    group_main_addr: int
+    device_addrs: list  # list[int] — device_addr of light members only
+
+
+@dataclass
 class HafeleEntryData:
     """Runtime data for a Häfele Connect Mesh config entry."""
 
@@ -56,6 +65,7 @@ class HafeleEntryData:
     network_id: str | None = None
     prefix: str | None = None
     direct_client: object | None = None
+    mqtt_groups: list = field(default_factory=list)  # list[MQTTGroup]
 
 
 type HafeleConfigEntry = ConfigEntry[HafeleEntryData]
@@ -324,12 +334,72 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_setup()
         coordinators[device.id] = coordinator
 
+    # ------------------------------------------------------------------
+    # Groups discovery
+    # ------------------------------------------------------------------
+    groups_topic = f"{prefix}/groups"
+    discovered_groups: list[dict] = []
+    groups_event = asyncio.Event()
+
+    @callback
+    def _on_groups(msg) -> None:
+        try:
+            payload = json.loads(msg.payload)
+        except (json.JSONDecodeError, TypeError):
+            _LOGGER.warning("Invalid MQTT groups payload: %s", msg.payload)
+            groups_event.set()
+            return
+        if isinstance(payload, list):
+            discovered_groups.extend(payload)
+        elif isinstance(payload, dict):
+            discovered_groups.append(payload)
+        groups_event.set()
+
+    if direct_client:
+        unsubscribe_groups = await direct_client.async_subscribe(groups_topic, _on_groups)
+    else:
+        unsubscribe_groups = await ha_mqtt.async_subscribe(hass, groups_topic, _on_groups, qos=0)
+
+    try:
+        await asyncio.wait_for(groups_event.wait(), timeout=_MQTT_DISCOVERY_TIMEOUT)
+    except asyncio.TimeoutError:
+        _LOGGER.debug("MQTT groups discovery timed out, continuing without group routing.")
+    finally:
+        unsubscribe_groups()
+
+    # Build MQTTGroup objects and group-address → coordinator fan-out map
+    mqtt_groups: list[MQTTGroup] = []
+    group_addr_to_coordinators: dict[int, list[HafeleMQTTCoordinator]] = {}
+
+    for group in discovered_groups:
+        try:
+            group_addr = int(group["group_main_addr"])
+            member_addrs = {int(a) for a in group.get("devices", [])}
+        except (KeyError, TypeError, ValueError) as err:
+            _LOGGER.warning("Skipping malformed group entry: %s", err)
+            continue
+        member_devices = [d for d in light_devices if d.device_addr in member_addrs]
+        member_coordinators = [coordinators[d.id] for d in member_devices if d.id in coordinators]
+        if not member_coordinators:
+            continue
+        mqtt_groups.append(MQTTGroup(
+            group_name=group["group_name"],
+            group_main_addr=group_addr,
+            device_addrs=[d.device_addr for d in member_devices],
+        ))
+        group_addr_to_coordinators[group_addr] = member_coordinators
+        _LOGGER.debug(
+            "Group 0x%04X '%s' → %d member(s)",
+            group_addr, group["group_name"], len(member_coordinators),
+        )
+
     entry.runtime_data = HafeleEntryData(
         coordinators=coordinators,
         devices=light_devices,
         gateways=[],
         prefix=prefix,
         direct_client=direct_client,
+        mqtt_groups=mqtt_groups,
     )
 
     # Subscribe to hafele/rawMessage for BLE Mesh push updates.
@@ -380,13 +450,12 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 opcode = opcode[2:]
             payload_hex = data.get("payload", "")
 
-            # Source lookup: covers Status responses (008204/00824E/…) where
-            # source = the light node that is replying to our Get command.
+            # Tier 1 — source lookup: covers Status responses (008204/00824E/…)
+            # where source = the light node replying to our Get command.
             coordinator = addr_to_coordinator.get(source_addr)
 
-            # Destination fallback: covers Set Unack messages (008203/00824D/…)
-            # where a physical switch or remote is the source and the light is
-            # the destination. Parse destination with the same hex logic.
+            # Parse destination once (needed for tiers 2 and 3)
+            dest_addr: int | None = None
             if coordinator is None:
                 raw_dest = data.get("destination", "")
                 try:
@@ -397,15 +466,34 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         if dest_str.startswith(("0x", "0X")):
                             dest_str = dest_str[2:]
                         dest_addr = int(dest_str, 16)
-                    coordinator = addr_to_coordinator.get(dest_addr)
                 except (ValueError, TypeError):
                     pass
 
+            # Tier 2 — destination unicast: Set Unack (008203/00824D/…) where a
+            # physical switch is the source and the individual light is the destination.
+            if coordinator is None and dest_addr is not None:
+                coordinator = addr_to_coordinator.get(dest_addr)
+
+            # Tier 3 — group fan-out: destination is a group address (e.g. 008207
+            # from a tactile remote). Dispatch to every member coordinator.
+            if coordinator is None and dest_addr is not None:
+                group_coordinators = group_addr_to_coordinators.get(dest_addr)
+                if group_coordinators:
+                    for gc in group_coordinators:
+                        gc.handle_raw_message(opcode, payload_hex)
+                    return
+
             if coordinator is None:
-                _LOGGER.debug(
-                    "rawMessage ignored: src=0x%s opcode=%s (no coordinator for source or destination)",
-                    data.get("source", "?"), opcode,
-                )
+                if opcode in MQTT_KNOWN_OPCODES:
+                    _LOGGER.debug(
+                        "rawMessage: known opcode %s from src=0x%s — no matching device (gateway or non-light node)",
+                        opcode, data.get("source", "?"),
+                    )
+                else:
+                    _LOGGER.debug(
+                        "rawMessage: unknown opcode %s from src=0x%s — ignored",
+                        opcode, data.get("source", "?"),
+                    )
                 return
 
             coordinator.handle_raw_message(opcode, payload_hex)

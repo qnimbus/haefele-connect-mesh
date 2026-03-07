@@ -19,10 +19,13 @@ _LOGGER = logging.getLogger(__name__)
 
 # BLE Mesh opcodes we decode from hafele/rawMessage
 # Set Unack = physical-change push; Status = response to our Get commands
-_ONOFF_OPCODES     = frozenset({"008203", "008204"})   # Generic OnOff Set Unack + Status
+_ONOFF_OPCODES     = frozenset({"008203", "008204", "008207"})  # Generic OnOff Set Unack + Status + Set (with ack)
 _LIGHTNESS_OPCODES = frozenset({"00824D", "00824E"})   # Light Lightness Set Unack + Status
 _CTL_OPCODES       = frozenset({"008262", "008263"})   # Light CTL Set Unack + Status
 _HSL_OPCODES       = frozenset({"008278", "008279"})   # Light HSL Set Unack + Status
+
+# Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
+KNOWN_OPCODES: frozenset[str] = _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES
 
 
 class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -236,6 +239,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Byte 0: OnOff (0/1). Set Unack has TID at byte 1 (ignored).
             if len(p) >= 1:
                 normalized["power"] = bool(p[0])
+                # If turning on and current lightness is 0, schedule a poll so
+                # HA learns the actual hardware brightness (e.g. after HA restart).
+                if bool(p[0]) and (self.data or {}).get("state", {}).get("lightness", 0) == 0:
+                    self.hass.async_create_task(self.async_request_state())
 
         elif opcode in _LIGHTNESS_OPCODES:
             # Bytes 0-1: Lightness uint16 LE (0-65535). Set Unack has TID at byte 2.
@@ -273,6 +280,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 normalized["saturation"] = sat_mesh / 65535
 
         if not normalized:
+            _LOGGER.debug(
+                "rawMessage: unrecognized opcode %s for %s (payload=%s) — no action taken",
+                opcode, self.device.name, payload_hex,
+            )
             return
 
         current_state = (self.data or {}).get("state", {})

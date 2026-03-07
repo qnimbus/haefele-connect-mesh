@@ -6,6 +6,8 @@ import logging
 from typing import Any
 from datetime import datetime, UTC
 
+import json
+
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_COLOR_TEMP_KELVIN,
@@ -14,7 +16,7 @@ from homeassistant.components.light import (
     LightEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -42,6 +44,7 @@ from .coordinator import HafeleUpdateCoordinator
 from .mqtt.coordinator import HafeleMQTTCoordinator
 from .models.device import Device as HafeleDevice
 from .models.mqtt_device import MQTTDevice
+from . import MQTTGroup
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,10 +61,26 @@ async def async_setup_entry(
     runtime_data = config_entry.runtime_data
 
     lights = [device for device in runtime_data.devices if device.is_light]
-    entities = [
+    entities: list = [
         HaefeleConnectMeshLight(runtime_data.coordinators[light.id], light, config_entry)
         for light in lights
     ]
+
+    # Group light entities (MQTT only)
+    for group in getattr(runtime_data, "mqtt_groups", []):
+        member_coordinators = [
+            runtime_data.coordinators[str(addr)]
+            for addr in group.device_addrs
+            if str(addr) in runtime_data.coordinators
+        ]
+        if member_coordinators:
+            entities.append(HafeleMQTTGroupLight(
+                group,
+                member_coordinators,
+                runtime_data.prefix,
+                runtime_data.direct_client,
+                config_entry,
+            ))
 
     if entities:
         async_add_entities(entities)
@@ -337,3 +356,135 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
         raise NotImplementedError(
             "Please use the async_turn_off method instead. This entity only supports async operation."
         )
+
+
+class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
+    """A light entity representing a Häfele BLE Mesh group.
+
+    Commands are published to the group topic so all members respond
+    simultaneously. State is aggregated from the individual member coordinators
+    which are updated via rawMessage push and/or status topic subscriptions.
+    """
+
+    def __init__(
+        self,
+        group: MQTTGroup,
+        member_coordinators: list[HafeleMQTTCoordinator],
+        prefix: str,
+        direct_client: object | None,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the group light."""
+        self._group = group
+        self._coordinators = member_coordinators
+        self._prefix = prefix
+        self._direct_client = direct_client
+        self._entry = entry
+        self._attr_unique_id = f"group_{group.group_main_addr}"
+        self._attr_has_entity_name = True
+        self._attr_name = None  # name comes from device_info
+        self._attr_color_mode = ColorMode.BRIGHTNESS
+        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to all member coordinators."""
+        await super().async_added_to_hass()
+        for coordinator in self._coordinators:
+            self.async_on_remove(
+                coordinator.async_add_listener(self._handle_member_update)
+            )
+
+    @callback
+    def _handle_member_update(self) -> None:
+        """Called when any member coordinator has new data."""
+        self.async_write_ha_state()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Register this group as its own HA device."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"group_{self._group.group_main_addr}")},
+            name=self._group.group_name,
+            manufacturer="Häfele",
+            model="Light Group",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Available if at least one member coordinator is healthy."""
+        return any(c.last_update_success for c in self._coordinators)
+
+    @property
+    def is_on(self) -> bool | None:
+        """On if any member is on."""
+        if not self.available:
+            return None
+        return any(
+            (c.data or {}).get("state", {}).get("power", False)
+            for c in self._coordinators
+        )
+
+    @property
+    def brightness(self) -> int | None:
+        """Average brightness of on-members, in HA scale (0–255)."""
+        if not self.is_on:
+            return None
+        on_lightness = []
+        for c in self._coordinators:
+            state = (c.data or {}).get("state", {})
+            if not state.get("power"):
+                continue
+            # Prefer actual lightness; fall back to lastLightness if lightness is 0
+            # (happens when OnOff rawMessage arrives before a Lightness update)
+            lightness = state.get("lightness") or state.get("lastLightness")
+            if lightness:
+                on_lightness.append(lightness)
+        if not on_lightness:
+            return None
+        avg = round(sum(on_lightness) / len(on_lightness))
+        return value_to_brightness(BRIGHTNESS_SCALE_MESH, avg)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the group (and optionally set brightness)."""
+        try:
+            new_state: dict = {"power": True}
+            if ATTR_BRIGHTNESS in kwargs:
+                lightness = brightness_to_value(BRIGHTNESS_SCALE_PERCENTAGE, kwargs[ATTR_BRIGHTNESS])
+                lightness_frac = lightness / 100
+                await self._publish("lightness", lightness_frac)
+                new_state["lightness"] = round(lightness_frac * 65535)
+            await self._publish("power", True)
+            _LOGGER.debug("Group '%s' turn_on published", self._group.group_name)
+            for coordinator in self._coordinators:
+                current = (coordinator.data or {}).get("state", {})
+                coordinator.async_set_updated_data({"state": {**current, **new_state}})
+        except Exception:
+            _LOGGER.exception("Failed to turn on group '%s'", self._group.group_name)
+            raise HomeAssistantError(f"Failed to turn on group {self._group.group_name}")
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the group."""
+        try:
+            await self._publish("power", False)
+            _LOGGER.debug("Group '%s' turn_off published", self._group.group_name)
+            for coordinator in self._coordinators:
+                current = (coordinator.data or {}).get("state", {})
+                coordinator.async_set_updated_data({"state": {**current, "power": False}})
+        except Exception:
+            _LOGGER.exception("Failed to turn off group '%s'", self._group.group_name)
+            raise HomeAssistantError(f"Failed to turn off group {self._group.group_name}")
+
+    async def _publish(self, command: str, payload: Any) -> None:
+        """Publish a command to the group topic."""
+        import homeassistant.components.mqtt as ha_mqtt  # noqa: PLC0415
+        topic = f"{self._prefix}/groups/{self._group.group_name}/{command}"
+        if isinstance(payload, bool):
+            payload_str = json.dumps(payload)
+        elif isinstance(payload, (dict, list)):
+            payload_str = json.dumps(payload)
+        else:
+            payload_str = str(payload)
+        if self._direct_client:
+            await self._direct_client.async_publish(topic, payload_str)
+        else:
+            await ha_mqtt.async_publish(self.hass, topic, payload_str)
