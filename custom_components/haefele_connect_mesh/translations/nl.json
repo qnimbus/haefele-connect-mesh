@@ -83,7 +83,13 @@
         }
       },
       "mqtt_options": {
-        "title": "MQTT-opties"
+        "title": "MQTT-opties",
+        "data": {
+          "add_group_entities": "Groepslichentiteiten aanmaken"
+        },
+        "data_description": {
+          "add_group_entities": "Häfele lichtgroepen als aparte HA-lichentiteiten weergeven. Groeps-rawMessages werken altijd voor individuele lampen, ongeacht deze instelling."
+        }
       }
     }
   },

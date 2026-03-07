@@ -40,6 +40,8 @@ from .const import (
     CONF_MQTT_USERNAME,
     CONF_MQTT_PASSWORD,
     DEFAULT_MQTT_PORT,
+    CONF_MQTT_ADD_GROUPS,
+    DEFAULT_MQTT_ADD_GROUPS,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
@@ -381,8 +383,22 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Route to the appropriate options step based on connection type."""
         if self._entry.data.get(CONF_CONNECTION_TYPE) == CONNECTION_TYPE_CLOUD:
             return await self.async_step_cloud_options(user_input)
-        # MQTT is pure push — no options to configure
-        return self.async_create_entry(title="", data={})
+        return await self.async_step_mqtt_options()
+
+    async def async_step_mqtt_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage MQTT options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_MQTT_ADD_GROUPS,
+                default=self._entry.options.get(CONF_MQTT_ADD_GROUPS, DEFAULT_MQTT_ADD_GROUPS),
+            ): BooleanSelector(),
+        })
+        return self.async_show_form(step_id="mqtt_options", data_schema=schema)
 
     async def async_step_cloud_options(
         self, user_input: dict[str, Any] | None = None

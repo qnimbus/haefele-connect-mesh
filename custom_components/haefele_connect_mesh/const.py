@@ -20,6 +20,8 @@ CONF_MQTT_PORT = "port"
 CONF_MQTT_USERNAME = "username"
 CONF_MQTT_PASSWORD = "password"
 DEFAULT_MQTT_PORT = 1883
+CONF_MQTT_ADD_GROUPS = "add_group_entities"
+DEFAULT_MQTT_ADD_GROUPS = False
 # Device Capabilities
 
 BRIGHTNESS_SCALE_PERCENTAGE = (1, 100)  # Percentage

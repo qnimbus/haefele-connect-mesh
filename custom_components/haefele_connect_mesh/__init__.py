@@ -36,6 +36,8 @@ from .const import (
     CONF_MQTT_PORT,
     CONF_MQTT_USERNAME,
     CONF_MQTT_PASSWORD,
+    CONF_MQTT_ADD_GROUPS,
+    DEFAULT_MQTT_ADD_GROUPS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -393,13 +395,14 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             group_addr, group["group_name"], len(member_coordinators),
         )
 
+    add_groups = entry.options.get(CONF_MQTT_ADD_GROUPS, DEFAULT_MQTT_ADD_GROUPS)
     entry.runtime_data = HafeleEntryData(
         coordinators=coordinators,
         devices=light_devices,
         gateways=[],
         prefix=prefix,
         direct_client=direct_client,
-        mqtt_groups=mqtt_groups,
+        mqtt_groups=mqtt_groups if add_groups else [],
     )
 
     # Subscribe to hafele/rawMessage for BLE Mesh push updates.

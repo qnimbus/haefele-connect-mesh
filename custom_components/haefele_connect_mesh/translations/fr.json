@@ -83,7 +83,13 @@
         }
       },
       "mqtt_options": {
-        "title": "Options MQTT"
+        "title": "Options MQTT",
+        "data": {
+          "add_group_entities": "Créer des entités de lumière de groupe"
+        },
+        "data_description": {
+          "add_group_entities": "Exposer les groupes de lumières Häfele comme entités HA séparées. Les rawMessages de groupe mettent toujours à jour les lumières individuelles indépendamment de ce paramètre."
+        }
       }
     }
   },
