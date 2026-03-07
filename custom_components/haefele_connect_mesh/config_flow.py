@@ -257,6 +257,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders={"connect_mesh_url": "https://cloud.connect-mesh.io/developer"},
         )
 
     # ------------------------------------------------------------------
@@ -347,7 +348,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
             description_placeholders={
-                "error_detail": errors.get("base", "")
+                "error_detail": errors.get("base", ""),
+                "connect_mesh_url": "https://cloud.connect-mesh.io/developer",
             },
         )
 

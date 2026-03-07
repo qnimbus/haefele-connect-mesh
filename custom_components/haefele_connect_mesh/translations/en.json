@@ -44,7 +44,7 @@
           "api_token": "API Token"
         },
         "data_description": {
-          "api_token": "Generate an API token at https://cloud.connect-mesh.io/developer after creating a Connect Mesh Cloud account."
+          "api_token": "Generate an API token at {connect_mesh_url} after creating a Connect Mesh Cloud account."
         }
       },
       "network": {
@@ -64,7 +64,7 @@
           "api_token": "API Token"
         },
         "data_description": {
-          "api_token": "Enter a valid API token to restore the connection. Generate one at https://cloud.connect-mesh.io/developer."
+          "api_token": "Enter a valid API token to restore the connection. Generate one at {connect_mesh_url}."
         }
       }
     },

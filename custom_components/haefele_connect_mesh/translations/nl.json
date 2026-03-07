@@ -44,7 +44,7 @@
           "api_token": "API Token"
         },
         "data_description": {
-          "api_token": "Genereer een API-token op https://cloud.connect-mesh.io/developer na het aanmaken van een Connect Mesh Cloud-account."
+          "api_token": "Genereer een API-token op {connect_mesh_url} na het aanmaken van een Connect Mesh Cloud-account."
         }
       },
       "network": {

@@ -44,7 +44,7 @@
           "api_token": "Jeton API"
         },
         "data_description": {
-          "api_token": "Générez un jeton API sur https://cloud.connect-mesh.io/developer après avoir créé un compte Connect Mesh Cloud."
+          "api_token": "Générez un jeton API sur {connect_mesh_url} après avoir créé un compte Connect Mesh Cloud."
         }
       },
       "network": {
