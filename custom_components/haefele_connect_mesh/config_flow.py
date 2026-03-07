@@ -70,6 +70,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._api_token: str | None = None
         self._networks: list[dict] | None = None
         self._mqtt_topic_prefix: str | None = None
+        self._mqtt_add_groups: bool = DEFAULT_MQTT_ADD_GROUPS
         self._reauth_entry = None
 
     # ------------------------------------------------------------------
@@ -117,6 +118,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             use_ha = user_input[CONF_MQTT_USE_HA]
             self._mqtt_topic_prefix = user_input[CONF_MQTT_TOPIC_PREFIX]
+            self._mqtt_add_groups = user_input[CONF_MQTT_ADD_GROUPS]
 
             if use_ha:
                 if not ha_mqtt_available:
@@ -131,6 +133,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
                             CONF_MQTT_USE_HA: True,
                         },
+                        options={CONF_MQTT_ADD_GROUPS: self._mqtt_add_groups},
                     )
             else:
                 return await self.async_step_mqtt_broker()
@@ -145,6 +148,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_MQTT_TOPIC_PREFIX, default=DEFAULT_MQTT_TOPIC_PREFIX
                     ): str,
+                    vol.Required(
+                        CONF_MQTT_ADD_GROUPS, default=DEFAULT_MQTT_ADD_GROUPS
+                    ): BooleanSelector(),
                 }
             ),
             errors=errors,
@@ -174,6 +180,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MQTT_USERNAME: user_input.get(CONF_MQTT_USERNAME, ""),
                     CONF_MQTT_PASSWORD: user_input.get(CONF_MQTT_PASSWORD, ""),
                 },
+                options={CONF_MQTT_ADD_GROUPS: self._mqtt_add_groups},
             )
 
         return self.async_show_form(

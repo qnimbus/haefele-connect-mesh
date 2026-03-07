@@ -14,11 +14,13 @@
         "title": "Configurer le MQTT local",
         "data": {
           "use_ha_mqtt": "Utiliser le MQTT de Home Assistant",
-          "topic_prefix": "Préfixe de sujet MQTT"
+          "topic_prefix": "Préfixe de sujet MQTT",
+          "add_group_entities": "Créer des entités de lumière de groupe"
         },
         "data_description": {
           "use_ha_mqtt": "Utiliser le courtier MQTT configuré dans Home Assistant. Désactivez pour vous connecter à un autre courtier.",
-          "topic_prefix": "Le préfixe de sujet MQTT configuré dans votre passerelle Häfele (par défaut : hafele)"
+          "topic_prefix": "Le préfixe de sujet MQTT configuré dans votre passerelle Häfele (par défaut : hafele)",
+          "add_group_entities": "Exposer les groupes de lumières Häfele comme entités lumineuses séparées dans Home Assistant."
         }
       },
       "mqtt_broker": {
@@ -88,7 +90,7 @@
           "add_group_entities": "Créer des entités de lumière de groupe"
         },
         "data_description": {
-          "add_group_entities": "Exposer les groupes de lumières Häfele comme entités HA séparées. Les rawMessages de groupe mettent toujours à jour les lumières individuelles indépendamment de ce paramètre."
+          "add_group_entities": "Exposer les groupes de lumières Häfele comme entités lumineuses séparées dans Home Assistant."
         }
       }
     }

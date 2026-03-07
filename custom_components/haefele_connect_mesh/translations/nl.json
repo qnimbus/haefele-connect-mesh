@@ -14,11 +14,13 @@
         "title": "Lokale MQTT configureren",
         "data": {
           "use_ha_mqtt": "Home Assistant MQTT gebruiken",
-          "topic_prefix": "MQTT-onderwerpprefix"
+          "topic_prefix": "MQTT-onderwerpprefix",
+          "add_group_entities": "Groepslichentiteiten aanmaken"
         },
         "data_description": {
           "use_ha_mqtt": "De in Home Assistant geconfigureerde MQTT-broker gebruiken. Schakel uit om verbinding te maken met een andere broker.",
-          "topic_prefix": "Het MQTT-onderwerpprefix dat is geconfigureerd in uw Häfele Gateway (standaard: hafele)"
+          "topic_prefix": "Het MQTT-onderwerpprefix dat is geconfigureerd in uw Häfele Gateway (standaard: hafele)",
+          "add_group_entities": "Häfele lichtgroepen als aparte lichentiteiten weergeven in Home Assistant."
         }
       },
       "mqtt_broker": {
@@ -88,7 +90,7 @@
           "add_group_entities": "Groepslichentiteiten aanmaken"
         },
         "data_description": {
-          "add_group_entities": "Häfele lichtgroepen als aparte HA-lichentiteiten weergeven. Groeps-rawMessages werken altijd voor individuele lampen, ongeacht deze instelling."
+          "add_group_entities": "Häfele lichtgroepen als aparte lichentiteiten weergeven in Home Assistant."
         }
       }
     }

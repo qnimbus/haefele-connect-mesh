@@ -14,11 +14,13 @@
         "title": "Configure Local MQTT",
         "data": {
           "use_ha_mqtt": "Use Home Assistant MQTT",
-          "topic_prefix": "MQTT topic prefix"
+          "topic_prefix": "MQTT topic prefix",
+          "add_group_entities": "Create group light entities"
         },
         "data_description": {
           "use_ha_mqtt": "Use the MQTT broker configured in Home Assistant. Disable to connect to a different broker.",
-          "topic_prefix": "The MQTT topic prefix configured in your Häfele Gateway (default: hafele)"
+          "topic_prefix": "The MQTT topic prefix configured in your Häfele Gateway (default: hafele)",
+          "add_group_entities": "Expose Häfele light groups as separate light entities in Home Assistant."
         }
       },
       "mqtt_broker": {
@@ -98,7 +100,7 @@
           "add_group_entities": "Create group light entities"
         },
         "data_description": {
-          "add_group_entities": "Expose Häfele light groups as separate HA light entities. Group rawMessages always update individual lights regardless of this setting."
+          "add_group_entities": "Expose Häfele light groups as separate light entities in Home Assistant."
         }
       }
     }
