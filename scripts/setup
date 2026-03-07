@@ -4,8 +4,8 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Fix pip cache volume ownership (Docker named volumes are created owned by root)
-sudo chown -R vscode:vscode /home/vscode/.cache/pip 2>/dev/null || true
+# Fix volume ownership (Docker named volumes are created owned by root)
+sudo chown -R vscode:vscode /home/vscode 2>/dev/null || true
 
 python3 -m pip install --requirement requirements.txt
 
