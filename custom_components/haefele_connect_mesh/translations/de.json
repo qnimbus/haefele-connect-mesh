@@ -42,6 +42,9 @@
         "title": "Mit Häfele Connect Mesh verbinden",
         "data": {
           "api_token": "API-Token"
+        },
+        "data_description": {
+          "api_token": "Generieren Sie ein API-Token unter https://cloud.connect-mesh.io/developer, nachdem Sie ein Connect Mesh Cloud-Konto erstellt haben."
         }
       },
       "network": {
@@ -49,6 +52,9 @@
         "description": "Insgesamt {device_count} Geräte in allen Netzwerken gefunden.\nWählen Sie ein Netzwerk, um fortzufahren...",
         "data": {
           "network_id": "Netzwerk (Anzahl der Geräte)"
+        },
+        "data_description": {
+          "network_id": "Wählen Sie das Häfele Connect Mesh-Netzwerk aus, dessen Geräte Sie zu Home Assistant hinzufügen möchten."
         }
       }
     },

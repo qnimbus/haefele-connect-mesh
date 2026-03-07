@@ -42,6 +42,9 @@
         "title": "Se connecter à Häfele Connect Mesh",
         "data": {
           "api_token": "Jeton API"
+        },
+        "data_description": {
+          "api_token": "Générez un jeton API sur https://cloud.connect-mesh.io/developer après avoir créé un compte Connect Mesh Cloud."
         }
       },
       "network": {
@@ -49,6 +52,9 @@
         "description": "{device_count} appareils trouvés dans tous les réseaux.\nSélectionnez un réseau pour continuer...",
         "data": {
           "network_id": "Réseau (Nb d'appareils)"
+        },
+        "data_description": {
+          "network_id": "Sélectionnez le réseau Häfele Connect Mesh dont vous souhaitez ajouter les appareils à Home Assistant."
         }
       }
     },

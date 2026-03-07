@@ -42,6 +42,9 @@
         "title": "Verbind met Häfele Connect Mesh",
         "data": {
           "api_token": "API Token"
+        },
+        "data_description": {
+          "api_token": "Genereer een API-token op https://cloud.connect-mesh.io/developer na het aanmaken van een Connect Mesh Cloud-account."
         }
       },
       "network": {
@@ -49,6 +52,9 @@
         "description": "In totaal {device_count} apparaten gevonden.\nSelecteer een netwerk om door te gaan...",
         "data": {
           "network_id": "Netwerk (aantal apparaten)"
+        },
+        "data_description": {
+          "network_id": "Selecteer het Häfele Connect Mesh-netwerk waarvan u de apparaten aan Home Assistant wilt toevoegen."
         }
       }
     },

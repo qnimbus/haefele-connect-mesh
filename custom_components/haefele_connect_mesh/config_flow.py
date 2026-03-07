@@ -8,6 +8,11 @@ from typing import Any, Mapping
 import voluptuous as vol
 import aiohttp
 
+try:
+    import aiomqtt
+except ImportError:
+    aiomqtt = None  # type: ignore[assignment]
+
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_TOKEN
 from homeassistant.data_entry_flow import FlowResult
@@ -167,21 +172,39 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            await self.async_set_unique_id(f"mqtt_{self._mqtt_topic_prefix}")
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title="Häfele Connect Mesh (Local)",
-                data={
-                    CONF_CONNECTION_TYPE: CONNECTION_TYPE_MQTT,
-                    CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
-                    CONF_MQTT_USE_HA: False,
-                    CONF_MQTT_BROKER: user_input[CONF_MQTT_BROKER],
-                    CONF_MQTT_PORT: user_input[CONF_MQTT_PORT],
-                    CONF_MQTT_USERNAME: user_input.get(CONF_MQTT_USERNAME, ""),
-                    CONF_MQTT_PASSWORD: user_input.get(CONF_MQTT_PASSWORD, ""),
-                },
-                options={CONF_MQTT_ADD_GROUPS: self._mqtt_add_groups},
-            )
+            broker = user_input[CONF_MQTT_BROKER]
+            port = int(user_input[CONF_MQTT_PORT])
+            username = user_input.get(CONF_MQTT_USERNAME) or None
+            password = user_input.get(CONF_MQTT_PASSWORD) or None
+
+            try:
+                async with aiomqtt.Client(
+                    hostname=broker,
+                    port=port,
+                    username=username,
+                    password=password,
+                    timeout=5,
+                ):
+                    pass
+            except Exception:  # pylint: disable=broad-except
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                await self.async_set_unique_id(f"mqtt_{self._mqtt_topic_prefix}")
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title="Häfele Connect Mesh (Local)",
+                    data={
+                        CONF_CONNECTION_TYPE: CONNECTION_TYPE_MQTT,
+                        CONF_MQTT_TOPIC_PREFIX: self._mqtt_topic_prefix,
+                        CONF_MQTT_USE_HA: False,
+                        CONF_MQTT_BROKER: broker,
+                        CONF_MQTT_PORT: port,
+                        CONF_MQTT_USERNAME: user_input.get(CONF_MQTT_USERNAME, ""),
+                        CONF_MQTT_PASSWORD: user_input.get(CONF_MQTT_PASSWORD, ""),
+                    },
+                    options={CONF_MQTT_ADD_GROUPS: self._mqtt_add_groups},
+                )
 
         return self.async_show_form(
             step_id="mqtt_broker",
