@@ -77,6 +77,8 @@ While the integration includes support for color temperature and RGB/HSL capable
 3. If connecting directly to a broker, enter the broker hostname, port, and optional credentials
 4. Optionally enable group entity creation (for tactile remote / wall switch support)
 
+After setup, MQTT entries show a **Configure** button in **Settings → Devices & Services** where you can toggle group entity creation at any time.
+
 ## Features
 
 - Two connection modes: **cloud polling** (via Häfele cloud API) or **local MQTT** (direct gateway communication)
