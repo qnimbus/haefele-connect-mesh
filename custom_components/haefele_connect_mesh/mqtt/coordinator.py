@@ -28,11 +28,13 @@ _ONOFF_OPCODES = frozenset({"008203", "008207"})  # OnOff Set Unack + Set (with 
 _LIGHTNESS_OPCODES = frozenset({"00824D"})  # Light Lightness Set Unack
 _CTL_OPCODES = frozenset({"008262"})  # Light CTL Set Unack
 _HSL_OPCODES = frozenset({"008278"})  # Light HSL Set Unack
+# Status opcodes silently ignored on rawMessage (handled via status topic)
+_STATUS_OPCODES = frozenset({"008204", "00824E", "008263", "008279"})
 SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
 KNOWN_OPCODES: frozenset[str] = (
-    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | SCENE_OPCODES
+    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | SCENE_OPCODES | _STATUS_OPCODES
 )
 
 
@@ -249,6 +251,9 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             p = bytes.fromhex(payload_hex)
         except ValueError:
             return
+
+        if opcode in _STATUS_OPCODES:
+            return  # Get-command response; handled via per-device status topic subscription
 
         normalized: dict[str, Any] = {}
 

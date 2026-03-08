@@ -443,6 +443,9 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Deduplication: track (source_addr, sequence_number) of recently seen messages
         _seen_raw: set[tuple[int, int]] = set()
 
+        # Scene-poll debounce: group_main_addr values with an active poll task
+        _active_scene_polls: set[int] = set()
+
         @callback
         def _on_raw_message(msg: ReceiveMessage) -> None:
             try:
@@ -510,28 +513,38 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         # Scene recall: stagger state polls to avoid flooding the
                         # MQTT publish queue with N simultaneous powerGet/lightnessGet
                         # pairs. One request every 100 ms keeps the queue shallow.
+                        # BLE Mesh retransmits the same event 2–3× with different
+                        # sequence numbers — skip if a poll is already in flight.
+                        if dest_addr in _active_scene_polls:
+                            return  # retransmit — poll already in flight for this group
+                        _active_scene_polls.add(dest_addr)
+
                         async def _staggered_scene_poll(
                             coords: list[HafeleMQTTCoordinator] = group_coordinators,
                             op: str = opcode,
                             pay: str = payload_hex,
+                            group_addr: int = dest_addr,
                         ) -> None:
-                            p_bytes = bytes.fromhex(pay) if pay else b""
-                            scene_num = (
-                                int.from_bytes(p_bytes[0:2], "little")
-                                if len(p_bytes) >= 2
-                                else -1
-                            )
-                            for i, gc in enumerate(coords):
-                                if i > 0:
-                                    await asyncio.sleep(MQTT_POLL_STAGGER_DELAY)
-                                _LOGGER.debug(
-                                    "rawMessage: scene recall (opcode=%s, scene=%d)"
-                                    " for %s — requesting state",
-                                    op,
-                                    scene_num,
-                                    gc.device.name,
+                            try:
+                                p_bytes = bytes.fromhex(pay) if pay else b""
+                                scene_num = (
+                                    int.from_bytes(p_bytes[0:2], "little")
+                                    if len(p_bytes) >= 2
+                                    else -1
                                 )
-                                await gc.async_request_state()
+                                for i, gc in enumerate(coords):
+                                    if i > 0:
+                                        await asyncio.sleep(MQTT_POLL_STAGGER_DELAY)
+                                    _LOGGER.debug(
+                                        "rawMessage: scene recall (opcode=%s, scene=%d)"
+                                        " for %s — requesting state",
+                                        op,
+                                        scene_num,
+                                        gc.device.name,
+                                    )
+                                    await gc.async_request_state()
+                            finally:
+                                _active_scene_polls.discard(group_addr)
 
                         hass.async_create_background_task(
                             _staggered_scene_poll(), "haefele_scene_poll"
