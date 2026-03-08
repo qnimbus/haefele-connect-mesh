@@ -339,8 +339,10 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         data=self._entry.data,
                     )
                 )
-                raise UpdateFailed("Authentication failed, please reauthenticate")
-            raise UpdateFailed(f"Error communicating with API: {error}")
+                raise UpdateFailed(
+                    "Authentication failed, please reauthenticate"
+                ) from error
+            raise UpdateFailed(f"Error communicating with API: {error}") from error
         except asyncio.CancelledError:
             # Re-raise cancelled errors
             raise
@@ -349,7 +351,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.exception(
                 "Unexpected error fetching %s data: %s", self.device.name, str(error)
             )
-            raise UpdateFailed(f"Unexpected error: {error}")
+            raise UpdateFailed(f"Unexpected error: {error}") from error
 
     # ------------------------------------------------------------------
     # Command methods — uniform interface shared with HafeleMQTTCoordinator

@@ -78,7 +78,8 @@ def retry_with_backoff(
 
                     if not should_retry:
                         logger.debug(
-                            "Not retrying request. Error type: %s, Status: %s, Code: %s",
+                            "Not retrying request. Error type: %s,"
+                            " Status: %s, Code: %s",
                             type(e).__name__,
                             getattr(e, "status_code", None),
                             getattr(e, "error_code", None),

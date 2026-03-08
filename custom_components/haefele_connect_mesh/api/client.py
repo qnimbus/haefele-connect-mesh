@@ -86,7 +86,7 @@ class HafeleClient:
                     message=f"Request timed out after {timeout} seconds",
                     status_code=None,
                     error_code="TIMEOUT",
-                )
+                ) from e
 
             # Handle aiohttp client errors
             if isinstance(e, aiohttp.ClientResponseError):
@@ -95,11 +95,15 @@ class HafeleClient:
                 error_data["message"] = getattr(e, "message", "")
 
             raise HafeleAPIError(
-                message=f"Request failed. Method: {method.upper()}, URL: {url}, HTTP Status: {status_code}, Error: {error_data.get('message')}",
+                message=(
+                    f"Request failed. Method: {method.upper()}, URL: {url},"
+                    f" HTTP Status: {status_code},"
+                    f" Error: {error_data.get('message')}"
+                ),
                 status_code=status_code,
                 error_code=error_data.get("message"),
                 response=error_data,
-            )
+            ) from e
 
     async def _get(self, endpoint: str, **kwargs: Any) -> aiohttp.ClientResponse:
         """Make a GET request to the API."""
@@ -201,7 +205,7 @@ class HafeleClient:
             logger.error("Unexpected error pinging gateway %s: %s", gateway_id, str(e))
             raise HafeleAPIError(
                 message=f"Failed to ping gateway: {e!s}", error_code="PING_FAILED"
-            )
+            ) from e
 
     async def get_network_details(self, network_id: str) -> Network:
         """
@@ -350,7 +354,9 @@ class HafeleClient:
 
             except ValidationError as e:
                 logger.error("Failed to parse device data: %s", str(e))
-                raise ValidationError(f"Invalid device data received from API: {e!s}")
+                raise ValidationError(
+                    f"Invalid device data received from API: {e!s}"
+                ) from e
 
         except HafeleAPIError:
             # Re-raise since _get already handles proper error wrapping
@@ -513,7 +519,8 @@ class HafeleClient:
 
         except HafeleAPIError as e:
             logger.error(
-                "Failed to set power state for device %s (ID: %s). Status: %s, Error: %s",
+                "Failed to set power state for device %s (ID: %s)."
+                " Status: %s, Error: %s",
                 device.name,
                 device.id,
                 e.status_code,
@@ -713,7 +720,8 @@ class HafeleClient:
 
         except HafeleAPIError as e:
             logger.error(
-                "Failed to set temperature for device %s (ID: %s). Status: %s, Error: %s",
+                "Failed to set temperature for device %s (ID: %s)."
+                " Status: %s, Error: %s",
                 device.name,
                 device.id,
                 e.status_code,

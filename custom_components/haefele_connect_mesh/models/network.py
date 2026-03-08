@@ -81,7 +81,7 @@ class NetworkKey:
                 timestamp=data["timestamp"],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid network key data: {e!s}")
+            raise ValidationError(f"Invalid network key data: {e!s}") from e
 
 
 class ApplicationKey:
@@ -146,7 +146,7 @@ class ApplicationKey:
                 key=data["key"],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid application key data: {e!s}")
+            raise ValidationError(f"Invalid application key data: {e!s}") from e
 
 
 class AddressRange:
@@ -192,7 +192,7 @@ class AddressRange:
         try:
             return cls(low_address=data["lowAddress"], high_address=data["highAddress"])
         except KeyError as e:
-            raise ValidationError(f"Invalid address range data: {e!s}")
+            raise ValidationError(f"Invalid address range data: {e!s}") from e
 
 
 class SceneRange:
@@ -238,7 +238,7 @@ class SceneRange:
         try:
             return cls(first_scene=data["firstScene"], last_scene=data["lastScene"])
         except KeyError as e:
-            raise ValidationError(f"Invalid scene range data: {e!s}")
+            raise ValidationError(f"Invalid scene range data: {e!s}") from e
 
 
 class Provisioner:
@@ -324,7 +324,7 @@ class Provisioner:
                 ],
             )
         except (KeyError, ValidationError) as e:
-            raise ValidationError(f"Invalid provisioner data: {e!s}")
+            raise ValidationError(f"Invalid provisioner data: {e!s}") from e
 
 
 class MeshConfiguration:
@@ -424,9 +424,9 @@ class MeshConfiguration:
         except KeyError as e:
             raise ValidationError(
                 f"Invalid mesh configuration data: Missing field {e!s}"
-            )
+            ) from e
         except ValidationError as e:
-            raise ValidationError(f"Invalid mesh configuration data: {e!s}")
+            raise ValidationError(f"Invalid mesh configuration data: {e!s}") from e
 
 
 class Network:
@@ -666,7 +666,9 @@ class Network:
             return network
 
         except KeyError as e:
-            raise ValidationError(f"Missing required field in network data: {e!s}")
+            raise ValidationError(
+                f"Missing required field in network data: {e!s}"
+            ) from e
 
     def to_dict(self) -> dict[str, Any]:
         """

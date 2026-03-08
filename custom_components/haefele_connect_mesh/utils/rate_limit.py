@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    """Rate limiter that tracks last call time for different function/instance combinations."""
+    """Rate limiter tracking last call time for different function/instance combos."""
 
     def __init__(self):
         self._last_call_time: dict[str, float] = {}

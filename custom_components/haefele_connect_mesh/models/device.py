@@ -43,7 +43,7 @@ class Element:
                 models=[int(model) for model in data["models"]],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid element data: {e!s}")
+            raise ValidationError(f"Invalid element data: {e!s}") from e
 
 
 class DeviceType(Enum):
@@ -159,8 +159,8 @@ class DeviceType(Enum):
         """Create DeviceType from string value."""
         try:
             return cls(type_str)
-        except ValueError:
-            raise ValidationError(f"Invalid device type: {type_str}")
+        except ValueError as e:
+            raise ValidationError(f"Invalid device type: {type_str}") from e
 
 
 class Device:
@@ -325,7 +325,7 @@ class Device:
                 elements=[Element.from_dict(elem) for elem in data["elements"]],
             )
         except (KeyError, ValueError) as e:
-            raise ValidationError(f"Invalid device data: {e!s}")
+            raise ValidationError(f"Invalid device data: {e!s}") from e
 
     def to_dict(self) -> dict[str, Any]:
         """

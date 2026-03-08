@@ -27,7 +27,7 @@ def parse_iso_date(date_str: str) -> datetime:
         # Try without milliseconds if first attempt fails
         try:
             return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
-        except ValueError:
+        except ValueError as e:
             raise ValidationError(
                 f"Invalid date format: {date_str}. Expected ISO 8601 format."
-            )
+            ) from e

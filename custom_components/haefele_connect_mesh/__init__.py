@@ -179,7 +179,8 @@ async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entry.runtime_data.devices.append(device)
             except TimeoutError:
                 _LOGGER.warning(
-                    "Timeout initializing coordinator for device %s (type: %s), skipping",
+                    "Timeout initializing coordinator for device %s"
+                    " (type: %s), skipping",
                     device.id,
                     device.type,
                 )
@@ -233,11 +234,12 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if use_ha:
         try:
             connected = ha_mqtt.is_connected(hass)
-        except KeyError:
+        except KeyError as err:
             raise ConfigEntryNotReady(
                 "HA MQTT integration is not configured. "
-                "Add the MQTT integration in Home Assistant first, or switch to direct broker mode."
-            )
+                "Add the MQTT integration in Home Assistant first,"
+                " or switch to direct broker mode."
+            ) from err
         if not connected:
             raise ConfigEntryNotReady("HA MQTT client is not connected")
     else:
@@ -556,7 +558,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if coordinator is None:
                 if opcode in MQTT_KNOWN_OPCODES:
                     _LOGGER.debug(
-                        "rawMessage: known opcode %s from src=0x%s — no matching device (gateway or non-light node)",
+                        "rawMessage: known opcode %s from src=0x%s"
+                        " — no matching device (gateway or non-light node)",
                         opcode,
                         data.get("source", "?"),
                     )
@@ -621,7 +624,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     _LOGGER.info(
-        "Häfele Connect Mesh (MQTT) set up with %d light device(s) (%d total discovered)",
+        "Häfele Connect Mesh (MQTT) set up with %d light device(s)"
+        " (%d total discovered)",
         len(light_devices),
         len(discovered_devices),
     )
@@ -637,7 +641,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     entry_data: HafeleEntryData = entry.runtime_data
 
-    # Cancel MQTT subscriptions / shut down cloud coordinators before unloading platforms
+    # Cancel MQTT subscriptions / shut down cloud coordinators before unloading
+    # platforms
     for coordinator in entry_data.coordinators.values():
         if isinstance(coordinator, HafeleMQTTCoordinator):
             await coordinator.async_unsubscribe()

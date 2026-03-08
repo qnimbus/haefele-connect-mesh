@@ -232,7 +232,8 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                     )
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid brightness value for {self.entity_id or self._device.name}: {ex}"
+                        f"Invalid brightness value for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
                 try:
@@ -242,7 +243,8 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                     )
                 except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set brightness for {self.entity_id or self._device.name}: {ex}"
+                        f"Failed to set brightness for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
             if ATTR_COLOR_TEMP_KELVIN in kwargs and self._device.supports_color_temp:
@@ -254,11 +256,13 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                     )
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid color temperature value for {self.entity_id or self._device.name}: {ex}"
+                        f"Invalid color temperature value for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
                 except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set color temperature for {self.entity_id or self._device.name}: {ex}"
+                        f"Failed to set color temperature for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
             if ATTR_HS_COLOR in kwargs and self._device.supports_hsl:
@@ -269,11 +273,13 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                     new_state["saturation"] = saturation
                 except ValueError as ex:
                     raise ServiceValidationError(
-                        f"Invalid HS color values for {self.entity_id or self._device.name}: {ex}"
+                        f"Invalid HS color values for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
                 except Exception as ex:
                     raise HomeAssistantError(
-                        f"Failed to set HS color for {self.entity_id or self._device.name}: {ex}"
+                        f"Failed to set HS color for"
+                        f" {self.entity_id or self._device.name}: {ex}"
                     ) from ex
 
             try:
@@ -383,13 +389,15 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""
         raise NotImplementedError(
-            "Please use the async_turn_on method instead. This entity only supports async operation."
+            "Please use the async_turn_on method instead."
+            " This entity only supports async operation."
         )
 
     def turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
         raise NotImplementedError(
-            "Please use the async_turn_off method instead. This entity only supports async operation."
+            "Please use the async_turn_off method instead."
+            " This entity only supports async operation."
         )
 
 
@@ -508,11 +516,11 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
                         await asyncio.sleep(0.1)
 
                 self.hass.async_create_task(_fetch_group_brightness())
-        except Exception:
+        except Exception as ex:
             _LOGGER.exception("Failed to turn on group '%s'", self._group.group_name)
             raise HomeAssistantError(
                 f"Failed to turn on group {self._group.group_name}"
-            )
+            ) from ex
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the group."""
@@ -524,11 +532,11 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
                 coordinator.async_set_updated_data(
                     {"state": {**current, "power": False}}
                 )
-        except Exception:
+        except Exception as ex:
             _LOGGER.exception("Failed to turn off group '%s'", self._group.group_name)
             raise HomeAssistantError(
                 f"Failed to turn off group {self._group.group_name}"
-            )
+            ) from ex
 
     async def _publish(self, command: str, payload: Any) -> None:
         """Publish a command to the group topic."""

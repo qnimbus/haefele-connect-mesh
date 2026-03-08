@@ -26,4 +26,4 @@ class Gateway:
                 connected=data["connected"],
             )
         except KeyError as e:
-            raise ValidationError(f"Invalid gateway data: {e!s}")
+            raise ValidationError(f"Invalid gateway data: {e!s}") from e

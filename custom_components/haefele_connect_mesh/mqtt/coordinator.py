@@ -32,7 +32,8 @@ _HSL_OPCODES = frozenset({"008278"})  # Light HSL Set Unack
 _STATUS_OPCODES = frozenset({"008204", "00824E", "008263", "008279"})
 SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
 
-# Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
+# Union of all opcodes we actively decode — used by __init__.py for richer
+# "ignored" logging
 KNOWN_OPCODES: frozenset[str] = (
     _ONOFF_OPCODES
     | _LIGHTNESS_OPCODES
@@ -259,7 +260,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         if opcode in _STATUS_OPCODES:
-            return  # Get-command response; handled via per-device status topic subscription
+            # Get-command response; handled via per-device status topic subscription
+            return
 
         normalized: dict[str, Any] = {}
 
@@ -323,7 +325,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if len(p) >= 2:
                 scene_number = int.from_bytes(p[0:2], "little")
                 _LOGGER.debug(
-                    "rawMessage: scene recall (opcode=%s, scene=%d) for %s — requesting state",
+                    "rawMessage: scene recall (opcode=%s, scene=%d)"
+                    " for %s — requesting state",
                     opcode,
                     scene_number,
                     self.device.name,
@@ -333,7 +336,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if not normalized:
             _LOGGER.debug(
-                "rawMessage: unrecognized opcode %s for %s (payload=%s) — no action taken",
+                "rawMessage: unrecognized opcode %s for %s (payload=%s)"
+                " — no action taken",
                 opcode,
                 self.device.name,
                 payload_hex,
