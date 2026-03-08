@@ -28,10 +28,11 @@ _LIGHTNESS_OPCODES = frozenset(
 )  # Light Lightness Set Unack + Status
 _CTL_OPCODES = frozenset({"008262", "008263"})  # Light CTL Set Unack + Status
 _HSL_OPCODES = frozenset({"008278", "008279"})  # Light HSL Set Unack + Status
+_SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
 KNOWN_OPCODES: frozenset[str] = (
-    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES
+    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | _SCENE_OPCODES
 )
 
 
@@ -79,10 +80,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("Subscribed to MQTT topic: %s", status_topic)
 
         # Request initial state
-        await asyncio.gather(
-            self._publish_get("powerGet"),
-            self._publish_get("lightnessGet"),
-        )
+        await self.async_request_state()
 
     async def async_unsubscribe(self) -> None:
         """Cancel the MQTT subscription."""
@@ -91,11 +89,20 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._unsubscribe = None
 
     async def async_request_state(self) -> None:
-        """Request current device state from the gateway."""
-        await asyncio.gather(
-            self._publish_get("powerGet"),
-            self._publish_get("lightnessGet"),
-        )
+        """Request current device state from the gateway.
+
+        Uses ctlGet/hslGet for capable devices so that a single response
+        covers both lightness and color temperature/HSL — important after
+        scene recalls where any combination of parameters may have changed.
+        """
+        gets = [self._publish_get("powerGet")]
+        if self.device.supports_hsl:
+            gets.append(self._publish_get("hslGet"))  # lightness + hue + saturation
+        elif self.device.supports_color_temp:
+            gets.append(self._publish_get("ctlGet"))  # lightness + temperature
+        else:
+            gets.append(self._publish_get("lightnessGet"))
+        await asyncio.gather(*gets)
 
     # ------------------------------------------------------------------
     # MQTT message handling
@@ -294,6 +301,21 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     normalized["lastLightness"] = lightness
                 normalized["hue"] = hue_mesh / 65535 * 360
                 normalized["saturation"] = sat_mesh / 65535
+
+        elif opcode in _SCENE_OPCODES:
+            # Bytes 0-1: Scene Number uint16 LE; Byte 2: TID.
+            # A scene recall sets an arbitrary combination of lightness/color/power
+            # that we cannot decode locally — poll the gateway for the actual state.
+            if len(p) >= 2:
+                scene_number = int.from_bytes(p[0:2], "little")
+                _LOGGER.debug(
+                    "rawMessage: scene recall (opcode=%s, scene=%d) for %s — requesting state",
+                    opcode,
+                    scene_number,
+                    self.device.name,
+                )
+                self.hass.async_create_task(self.async_request_state())
+            return
 
         if not normalized:
             _LOGGER.debug(
