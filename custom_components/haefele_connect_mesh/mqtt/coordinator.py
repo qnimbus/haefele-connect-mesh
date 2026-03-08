@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from ..const import DOMAIN, MIN_KELVIN, MAX_KELVIN
+from ..const import MAX_KELVIN, MIN_KELVIN
 from ..models.mqtt_device import MQTTDevice
 from .direct_client import DirectMQTTClient
 
@@ -19,13 +20,19 @@ _LOGGER = logging.getLogger(__name__)
 
 # BLE Mesh opcodes we decode from hafele/rawMessage
 # Set Unack = physical-change push; Status = response to our Get commands
-_ONOFF_OPCODES     = frozenset({"008203", "008204", "008207"})  # Generic OnOff Set Unack + Status + Set (with ack)
-_LIGHTNESS_OPCODES = frozenset({"00824D", "00824E"})   # Light Lightness Set Unack + Status
-_CTL_OPCODES       = frozenset({"008262", "008263"})   # Light CTL Set Unack + Status
-_HSL_OPCODES       = frozenset({"008278", "008279"})   # Light HSL Set Unack + Status
+_ONOFF_OPCODES = frozenset(
+    {"008203", "008204", "008207"}
+)  # Generic OnOff Set Unack + Status + Set (with ack)
+_LIGHTNESS_OPCODES = frozenset(
+    {"00824D", "00824E"}
+)  # Light Lightness Set Unack + Status
+_CTL_OPCODES = frozenset({"008262", "008263"})  # Light CTL Set Unack + Status
+_HSL_OPCODES = frozenset({"008278", "008279"})  # Light HSL Set Unack + Status
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
-KNOWN_OPCODES: frozenset[str] = _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES
+KNOWN_OPCODES: frozenset[str] = (
+    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES
+)
 
 
 class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -100,9 +107,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             payload = json.loads(msg.payload)
         except (json.JSONDecodeError, TypeError):
-            _LOGGER.warning(
-                "Received invalid JSON on %s: %s", msg.topic, msg.payload
-            )
+            _LOGGER.warning("Received invalid JSON on %s: %s", msg.topic, msg.payload)
             return
 
         normalized = self._normalize(payload)
@@ -125,7 +130,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
-        """Normalise MQTT payload values to internal mesh-scale format.
+        """
+        Normalise MQTT payload values to internal mesh-scale format.
 
         Returns a partial state dict containing only the keys present in
         the payload.
@@ -242,7 +248,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 normalized["power"] = bool(p[0])
                 # If turning on and current lightness is 0, schedule a poll so
                 # HA learns the actual hardware brightness (e.g. after HA restart).
-                if bool(p[0]) and (self.data or {}).get("state", {}).get("lightness", 0) == 0:
+                if (
+                    bool(p[0])
+                    and (self.data or {}).get("state", {}).get("lightness", 0) == 0
+                ):
                     self.hass.async_create_task(self.async_request_state())
 
         elif opcode in _LIGHTNESS_OPCODES:
@@ -262,9 +271,15 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
                 normalized["temperature"] = round(
-                    max(0, min(65535,
-                        (temp_kelvin - MIN_KELVIN) / (MAX_KELVIN - MIN_KELVIN) * 65535
-                    ))
+                    max(
+                        0,
+                        min(
+                            65535,
+                            (temp_kelvin - MIN_KELVIN)
+                            / (MAX_KELVIN - MIN_KELVIN)
+                            * 65535,
+                        ),
+                    )
                 )
 
         elif opcode in _HSL_OPCODES:
@@ -272,18 +287,20 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # 4-5: Saturation uint16 LE (0-65535 → 0.0-1.0).
             if len(p) >= 6:
                 lightness = int.from_bytes(p[0:2], "little")
-                hue_mesh  = int.from_bytes(p[2:4], "little")
-                sat_mesh  = int.from_bytes(p[4:6], "little")
+                hue_mesh = int.from_bytes(p[2:4], "little")
+                sat_mesh = int.from_bytes(p[4:6], "little")
                 normalized["lightness"] = lightness
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
-                normalized["hue"]        = hue_mesh / 65535 * 360
+                normalized["hue"] = hue_mesh / 65535 * 360
                 normalized["saturation"] = sat_mesh / 65535
 
         if not normalized:
             _LOGGER.debug(
                 "rawMessage: unrecognized opcode %s for %s (payload=%s) — no action taken",
-                opcode, self.device.name, payload_hex,
+                opcode,
+                self.device.name,
+                payload_hex,
             )
             return
 
@@ -293,7 +310,9 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({"state": merged})
         _LOGGER.debug(
             "rawMessage update for %s (opcode=%s): %s",
-            self.device.name, opcode, normalized,
+            self.device.name,
+            opcode,
+            normalized,
         )
 
     # ------------------------------------------------------------------

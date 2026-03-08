@@ -1,21 +1,24 @@
-"""Retry decorator with exponential backoff for async API calls.
+"""
+Retry decorator with exponential backoff for async API calls.
 
 This module provides a decorator that implements exponential backoff retry logic
 for async API calls to the Häfele Connect Mesh API.
 """
 
-import random
 import asyncio
 import logging
+import random
+from collections.abc import Callable
 from functools import wraps
-from typing import TypeVar, Callable, Any, Set
+from typing import Any, TypeVar
+
 from ..exceptions import HafeleAPIError, ValidationError
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 # Status codes that should trigger a retry
-RETRYABLE_STATUS_CODES: Set[int] = {
+RETRYABLE_STATUS_CODES: set[int] = {
     408,  # Request Timeout
     429,  # Too Many Requests
     500,  # Internal Server Error
@@ -31,7 +34,8 @@ def retry_with_backoff(
     max_delay: float = 16.0,
     jitter_range: float = 0.5,
 ) -> Callable:
-    """Decorator that implements exponential backoff retry logic for async functions.
+    """
+    Decorator that implements exponential backoff retry logic for async functions.
 
     Args:
         max_attempts: Maximum number of retry attempts (default: 5)
@@ -46,6 +50,7 @@ def retry_with_backoff(
         @retry_with_backoff(max_attempts=3)
         async def api_call():
             return await make_request()
+
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:

@@ -1,11 +1,13 @@
 """Date parsing utilities for the Häfele Connect Mesh API."""
 
 from datetime import datetime
+
 from ..exceptions import ValidationError
 
 
 def parse_iso_date(date_str: str) -> datetime:
-    """Parse an ISO 8601 formatted date string.
+    """
+    Parse an ISO 8601 formatted date string.
 
     Handles ISO 8601 dates with milliseconds and timezone indicator 'Z'.
 
@@ -17,10 +19,11 @@ def parse_iso_date(date_str: str) -> datetime:
 
     Raises:
         ValidationError: If the date string is invalid or cannot be parsed
+
     """
     try:
         return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-    except ValueError as e:
+    except ValueError:
         # Try without milliseconds if first attempt fails
         try:
             return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")

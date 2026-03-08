@@ -6,43 +6,51 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from homeassistant.components.mqtt.models import ReceiveMessage
+
+import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
-import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.client import HafeleClient
-from .coordinator import HafeleUpdateCoordinator
-from .exceptions import HafeleAPIError
-from .mqtt.coordinator import HafeleMQTTCoordinator, KNOWN_OPCODES as MQTT_KNOWN_OPCODES
-from .mqtt.direct_client import DirectMQTTClient
-from .models.mqtt_device import MQTTDevice
 from .const import (
-    DOMAIN,
     CONF_CONNECTION_TYPE,
+    CONF_MQTT_ADD_GROUPS,
+    CONF_MQTT_BROKER,
+    CONF_MQTT_PASSWORD,
+    CONF_MQTT_PORT,
+    CONF_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_USE_HA,
+    CONF_MQTT_USERNAME,
     CONNECTION_TYPE_CLOUD,
     CONNECTION_TYPE_MQTT,
-    CONF_MQTT_TOPIC_PREFIX,
-    DEFAULT_MQTT_TOPIC_PREFIX,
-    CONF_MQTT_USE_HA,
-    CONF_MQTT_BROKER,
-    CONF_MQTT_PORT,
-    CONF_MQTT_USERNAME,
-    CONF_MQTT_PASSWORD,
-    CONF_MQTT_ADD_GROUPS,
     DEFAULT_MQTT_ADD_GROUPS,
+    DEFAULT_MQTT_TOPIC_PREFIX,
+    DOMAIN,
 )
+from .coordinator import HafeleUpdateCoordinator
+from .exceptions import HafeleAPIError
+from .models.mqtt_device import MQTTDevice
+from .mqtt.coordinator import KNOWN_OPCODES as MQTT_KNOWN_OPCODES
+from .mqtt.coordinator import HafeleMQTTCoordinator
+from .mqtt.direct_client import DirectMQTTClient
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.LIGHT,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+]
 
 PARALLEL_UPDATES = 0
 
@@ -104,6 +112,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 # Cloud setup
 # ---------------------------------------------------------------------------
 
+
 async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the integration using the Häfele cloud API."""
     try:
@@ -151,7 +160,7 @@ async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with asyncio.timeout(30):
                 devices = await client.get_devices_for_network(network_id)
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             raise ConfigEntryNotReady("Timeout getting devices") from err
 
         for device in devices:
@@ -159,7 +168,7 @@ async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.debug(
                     "Initializing coordinator for device %s (type: %s)",
                     device.id,
-                    device.type
+                    device.type,
                 )
                 timeout = 30 if getattr(device, "is_socket", False) else 15
                 coordinator = HafeleUpdateCoordinator(hass, client, device, entry)
@@ -167,23 +176,25 @@ async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     await coordinator.async_config_entry_first_refresh()
                 entry.runtime_data.coordinators[device.id] = coordinator
                 entry.runtime_data.devices.append(device)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _LOGGER.warning(
                     "Timeout initializing coordinator for device %s (type: %s), skipping",
                     device.id,
-                    device.type
+                    device.type,
                 )
                 continue
             except Exception as err:
                 _LOGGER.error(
                     "Error initializing coordinator for device %s: %s",
                     device.id,
-                    str(err)
+                    str(err),
                 )
                 continue
 
         if not entry.runtime_data.coordinators:
-            raise ConfigEntryNotReady("No devices could be initialized, will retry later")
+            raise ConfigEntryNotReady(
+                "No devices could be initialized, will retry later"
+            )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         return True
@@ -209,6 +220,7 @@ async def _async_setup_cloud(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # ---------------------------------------------------------------------------
 # MQTT setup
 # ---------------------------------------------------------------------------
+
 
 async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the integration using a local MQTT broker."""
@@ -247,7 +259,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     discovery_event = asyncio.Event()
 
     @callback
-    def _on_discovery(msg) -> None:
+    def _on_discovery(msg: ReceiveMessage) -> None:
         """Handle a discovery message listing all lights."""
         try:
             payload = json.loads(msg.payload)
@@ -308,10 +320,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Wait for the gateway to respond with device list
     try:
-        await asyncio.wait_for(
-            discovery_event.wait(), timeout=_MQTT_DISCOVERY_TIMEOUT
-        )
-    except asyncio.TimeoutError:
+        await asyncio.wait_for(discovery_event.wait(), timeout=_MQTT_DISCOVERY_TIMEOUT)
+    except TimeoutError:
         _LOGGER.warning(
             "MQTT device discovery timed out after %ds on topic '%s'. "
             "Proceeding with %d device(s) found so far.",
@@ -332,7 +342,9 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Build coordinators for each discovered light device
     coordinators: dict[str, HafeleMQTTCoordinator] = {}
     for device in light_devices:
-        coordinator = HafeleMQTTCoordinator(hass, device, prefix, direct_client=direct_client)
+        coordinator = HafeleMQTTCoordinator(
+            hass, device, prefix, direct_client=direct_client
+        )
         await coordinator.async_setup()
         coordinators[device.id] = coordinator
 
@@ -344,7 +356,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     groups_event = asyncio.Event()
 
     @callback
-    def _on_groups(msg) -> None:
+    def _on_groups(msg: ReceiveMessage) -> None:
         try:
             payload = json.loads(msg.payload)
         except (json.JSONDecodeError, TypeError):
@@ -358,14 +370,20 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         groups_event.set()
 
     if direct_client:
-        unsubscribe_groups = await direct_client.async_subscribe(groups_topic, _on_groups)
+        unsubscribe_groups = await direct_client.async_subscribe(
+            groups_topic, _on_groups
+        )
     else:
-        unsubscribe_groups = await ha_mqtt.async_subscribe(hass, groups_topic, _on_groups, qos=0)
+        unsubscribe_groups = await ha_mqtt.async_subscribe(
+            hass, groups_topic, _on_groups, qos=0
+        )
 
     try:
         await asyncio.wait_for(groups_event.wait(), timeout=_MQTT_DISCOVERY_TIMEOUT)
-    except asyncio.TimeoutError:
-        _LOGGER.debug("MQTT groups discovery timed out, continuing without group routing.")
+    except TimeoutError:
+        _LOGGER.debug(
+            "MQTT groups discovery timed out, continuing without group routing."
+        )
     finally:
         unsubscribe_groups()
 
@@ -381,18 +399,24 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("Skipping malformed group entry: %s", err)
             continue
         member_devices = [d for d in light_devices if d.device_addr in member_addrs]
-        member_coordinators = [coordinators[d.id] for d in member_devices if d.id in coordinators]
+        member_coordinators = [
+            coordinators[d.id] for d in member_devices if d.id in coordinators
+        ]
         if not member_coordinators:
             continue
-        mqtt_groups.append(MQTTGroup(
-            group_name=group["group_name"],
-            group_main_addr=group_addr,
-            device_addrs=[d.device_addr for d in member_devices],
-        ))
+        mqtt_groups.append(
+            MQTTGroup(
+                group_name=group["group_name"],
+                group_main_addr=group_addr,
+                device_addrs=[d.device_addr for d in member_devices],
+            )
+        )
         group_addr_to_coordinators[group_addr] = member_coordinators
         _LOGGER.debug(
             "Group 0x%04X '%s' → %d member(s)",
-            group_addr, group["group_name"], len(member_coordinators),
+            group_addr,
+            group["group_name"],
+            len(member_coordinators),
         )
 
     add_groups = entry.options.get(CONF_MQTT_ADD_GROUPS, DEFAULT_MQTT_ADD_GROUPS)
@@ -411,15 +435,14 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if coordinators:
         # Build reverse map: BLE device_addr (int) → coordinator
         addr_to_coordinator: dict[int, HafeleMQTTCoordinator] = {
-            device.device_addr: coordinators[device.id]
-            for device in light_devices
+            device.device_addr: coordinators[device.id] for device in light_devices
         }
 
         # Deduplication: track (source_addr, sequence_number) of recently seen messages
         _seen_raw: set[tuple[int, int]] = set()
 
         @callback
-        def _on_raw_message(msg) -> None:
+        def _on_raw_message(msg: ReceiveMessage) -> None:
             try:
                 data = json.loads(msg.payload)
             except (json.JSONDecodeError, TypeError):
@@ -449,8 +472,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Normalize opcode early so we can log it in the fallback path
             opcode = data.get("opcode", "").upper()
-            if opcode.startswith("0X"):
-                opcode = opcode[2:]
+            opcode = opcode.removeprefix("0X")
             payload_hex = data.get("payload", "")
 
             # Tier 1 — source lookup: covers Status responses (008204/00824E/…)
@@ -490,12 +512,14 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if opcode in MQTT_KNOWN_OPCODES:
                     _LOGGER.debug(
                         "rawMessage: known opcode %s from src=0x%s — no matching device (gateway or non-light node)",
-                        opcode, data.get("source", "?"),
+                        opcode,
+                        data.get("source", "?"),
                     )
                 else:
                     _LOGGER.debug(
                         "rawMessage: unknown opcode %s from src=0x%s — ignored",
-                        opcode, data.get("source", "?"),
+                        opcode,
+                        data.get("source", "?"),
                     )
                 return
 
@@ -503,9 +527,13 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         raw_topic = f"{prefix}/rawMessage"
         if direct_client:
-            unsubscribe_raw = await direct_client.async_subscribe(raw_topic, _on_raw_message)
+            unsubscribe_raw = await direct_client.async_subscribe(
+                raw_topic, _on_raw_message
+            )
         else:
-            unsubscribe_raw = await ha_mqtt.async_subscribe(hass, raw_topic, _on_raw_message, qos=0)
+            unsubscribe_raw = await ha_mqtt.async_subscribe(
+                hass, raw_topic, _on_raw_message, qos=0
+            )
 
         async def _unsub_raw() -> None:
             unsubscribe_raw()
@@ -535,7 +563,9 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if area is None:
             area = area_reg.async_create(device.location)
         device_reg.async_update_device(device_entry.id, area_id=area.id)
-        _LOGGER.debug("Assigned area '%s' to device '%s'", device.location, device.device_name)
+        _LOGGER.debug(
+            "Assigned area '%s' to device '%s'", device.location, device.device_name
+        )
 
     _LOGGER.info(
         "Häfele Connect Mesh (MQTT) set up with %d light device(s) (%d total discovered)",
@@ -548,6 +578,7 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # ---------------------------------------------------------------------------
 # Unload
 # ---------------------------------------------------------------------------
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

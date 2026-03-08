@@ -2,39 +2,39 @@
 
 from __future__ import annotations
 
-import logging
 import asyncio
-from datetime import timedelta, datetime
-from typing import Dict, Any
+import logging
+from datetime import datetime, timedelta
+from typing import Any
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-from homeassistant.config_entries import ConfigEntry
 
 from .api.client import HafeleClient
 from .const import (
-    DOMAIN,
-    DEFAULT_SCAN_INTERVAL,
-    DEFAULT_NEW_DEVICES_CHECK_INTERVAL,
-    DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
-    CONF_SCAN_INTERVAL,
-    CONF_NEW_DEVICES_CHECK_INTERVAL,
     CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
-    MIN_KELVIN,
+    CONF_NEW_DEVICES_CHECK_INTERVAL,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
+    DEFAULT_NEW_DEVICES_CHECK_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
     MAX_KELVIN,
+    MIN_KELVIN,
 )
-from .models.device import Device
 from .exceptions import HafeleAPIError
+from .models.device import Device
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
+class HafeleUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching data from the API."""
 
     def __init__(
@@ -70,8 +70,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def device_details_update_interval(self) -> timedelta:
         """Get the device details update interval."""
         minutes = self._entry.options.get(
-            CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
-            DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL
+            CONF_DEVICE_DETAILS_UPDATE_INTERVAL, DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL
         )
         return timedelta(minutes=minutes)
 
@@ -79,8 +78,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def new_devices_check_interval(self) -> timedelta:
         """Get the new devices check interval."""
         minutes = self._entry.options.get(
-            CONF_NEW_DEVICES_CHECK_INTERVAL,
-            DEFAULT_NEW_DEVICES_CHECK_INTERVAL
+            CONF_NEW_DEVICES_CHECK_INTERVAL, DEFAULT_NEW_DEVICES_CHECK_INTERVAL
         )
         return timedelta(minutes=minutes)
 
@@ -118,7 +116,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                     # Update coordinator name
                     self.name = updated_device.name
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.error("Timeout checking device details for %s", self.device.name)
         except Exception as error:
             _LOGGER.error(
@@ -135,24 +133,24 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                     # Get current devices from API with specific timeout
                     new_devices = await asyncio.wait_for(
                         self.client.get_devices_for_network(self.device.network_id),
-                        timeout=30
+                        timeout=30,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     _LOGGER.warning(
                         "Timeout getting devices for network %s, will retry later",
-                        self.device.network_id
+                        self.device.network_id,
                     )
                     return
 
                 # Get existing device IDs
                 existing_device_ids = {
-                    device.id
-                    for device in self._entry.runtime_data.devices
+                    device.id for device in self._entry.runtime_data.devices
                 }
 
                 # Find new devices
                 new_device_objects = [
-                    device for device in new_devices
+                    device
+                    for device in new_devices
                     if device.id not in existing_device_ids
                 ]
 
@@ -162,7 +160,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         "light": [],
                         "switch": [],
                         "binary_sensor": [],
-                        "sensor": []
+                        "sensor": [],
                     }
 
                     entity_registry = er.async_get(self.hass)
@@ -172,33 +170,42 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
                         device_id = f"{DOMAIN}_{device.id}"
                         existing_entities = [
-                            entry for entry in entity_registry.entities.values()
+                            entry
+                            for entry in entity_registry.entities.values()
                             if entry.device_id == device_id
                         ]
-                        existing_unique_ids = {entry.unique_id for entry in existing_entities}
+                        existing_unique_ids = {
+                            entry.unique_id for entry in existing_entities
+                        }
 
                         # Create entities and add them to appropriate platform lists
                         if device.is_light:
                             from .light import HaefeleConnectMeshLight
+
                             light_unique_id = f"{device.id}_light"
                             if light_unique_id not in existing_unique_ids:
                                 platform_entities["light"].append(
                                     HaefeleConnectMeshLight(
-                                        self._entry.runtime_data.coordinators[device.id],
+                                        self._entry.runtime_data.coordinators[
+                                            device.id
+                                        ],
                                         device,
-                                        self._entry
+                                        self._entry,
                                     )
                                 )
 
                         if device.is_socket:
                             from .switch import HaefeleConnectMeshSwitch
+
                             switch_unique_id = f"{device.id}_switch"
                             if switch_unique_id not in existing_unique_ids:
                                 platform_entities["switch"].append(
                                     HaefeleConnectMeshSwitch(
-                                        self._entry.runtime_data.coordinators[device.id],
+                                        self._entry.runtime_data.coordinators[
+                                            device.id
+                                        ],
                                         device,
-                                        self._entry
+                                        self._entry,
                                     )
                                 )
 
@@ -212,7 +219,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                 HaefeleUpdateSuccessSensor(
                                     self._entry.runtime_data.coordinators[device.id],
                                     device,
-                                    self._entry
+                                    self._entry,
                                 )
                             )
 
@@ -222,7 +229,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                 HaefeleLastUpdateSensor(
                                     self._entry.runtime_data.coordinators[device.id],
                                     device,
-                                    self._entry
+                                    self._entry,
                                 )
                             )
 
@@ -230,46 +237,42 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                     for platform, entities in platform_entities.items():
                         if entities:
                             try:
-                                async_add_entities = self.hass.data[DOMAIN][self._entry_id].get(
-                                    f"async_add_{platform}_entities"
-                                )
+                                async_add_entities = self.hass.data[DOMAIN][
+                                    self._entry_id
+                                ].get(f"async_add_{platform}_entities")
                                 if async_add_entities:
                                     await asyncio.wait_for(
-                                        async_add_entities(entities),
-                                        timeout=30
+                                        async_add_entities(entities), timeout=30
                                     )
-                            except asyncio.TimeoutError:
+                            except TimeoutError:
                                 _LOGGER.warning(
                                     "Timeout adding %s entities for network %s",
                                     platform,
-                                    self.device.network_id
+                                    self.device.network_id,
                                 )
                             except Exception as err:
                                 _LOGGER.error(
-                                    "Error adding %s entities: %s",
-                                    platform,
-                                    str(err)
+                                    "Error adding %s entities: %s", platform, str(err)
                                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.error(
                 "Overall timeout checking for new devices for network %s",
-                self.device.network_id
+                self.device.network_id,
             )
         except Exception as error:
             _LOGGER.error(
                 "Error checking for new devices for network %s: %s",
                 self.device.network_id,
-                str(error)
+                str(error),
             )
         finally:
             self._new_devices_check_task = None
 
     async def _async_setup(self) -> None:
         """Perform one-time setup tasks."""
-        pass
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
             _LOGGER.debug(
@@ -289,7 +292,9 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Add lightness only for light devices
             if self.device.is_light and "lightness" in status["state"]:
                 transformed_data["state"]["lightness"] = status["state"]["lightness"]
-                transformed_data["state"]["lastLightness"] = status["state"].get("lastLightness", 0)
+                transformed_data["state"]["lastLightness"] = status["state"].get(
+                    "lastLightness", 0
+                )
 
             # Check if it's time to update device details
             now = datetime.now()
@@ -342,9 +347,7 @@ class HafeleUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as error:
             self.device.update_timestamp()
             _LOGGER.exception(
-                "Unexpected error fetching %s data: %s",
-                self.device.name,
-                str(error)
+                "Unexpected error fetching %s data: %s", self.device.name, str(error)
             )
             raise UpdateFailed(f"Unexpected error: {error}")
 

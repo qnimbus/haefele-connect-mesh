@@ -1,11 +1,10 @@
-from dataclasses import dataclass
-from datetime import datetime, UTC
-from typing import List, Optional, Dict, Any, Set
 from contextlib import suppress
+from datetime import UTC, datetime
+from typing import Any
 
 from ..exceptions import ValidationError
-from ..utils.parse_date import parse_iso_date
 from ..models.device import Device
+from ..utils.parse_date import parse_iso_date
 
 
 class NetworkKey:
@@ -20,7 +19,8 @@ class NetworkKey:
         phase: int,
         timestamp: str,
     ) -> None:
-        """Initialize a NetworkKey instance.
+        """
+        Initialize a NetworkKey instance.
 
         Args:
             name: Name of the network key
@@ -29,6 +29,7 @@ class NetworkKey:
             min_security: Minimum security level
             phase: Key phase
             timestamp: Key timestamp
+
         """
         self._name = name
         self._index = index
@@ -68,7 +69,7 @@ class NetworkKey:
         return self._timestamp
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "NetworkKey":
+    def from_dict(cls, data: dict[str, Any]) -> "NetworkKey":
         """Create a NetworkKey instance from dictionary data."""
         try:
             return cls(
@@ -80,20 +81,22 @@ class NetworkKey:
                 timestamp=data["timestamp"],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid network key data: {str(e)}")
+            raise ValidationError(f"Invalid network key data: {e!s}")
 
 
 class ApplicationKey:
     """Represents an application key in the mesh network."""
 
     def __init__(self, name: str, index: int, bound_net_key: int, key: str) -> None:
-        """Initialize an ApplicationKey instance.
+        """
+        Initialize an ApplicationKey instance.
 
         Args:
             name: Name of the application key
             index: Key index
             bound_net_key: Index of the bound network key
             key: The key value
+
         """
         self._name = name
         self._index = index
@@ -121,8 +124,9 @@ class ApplicationKey:
         return self._key
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ApplicationKey":
-        """Create an ApplicationKey instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "ApplicationKey":
+        """
+        Create an ApplicationKey instance from dictionary data.
 
         Args:
             data: Dictionary containing application key data
@@ -132,6 +136,7 @@ class ApplicationKey:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             return cls(
@@ -141,18 +146,20 @@ class ApplicationKey:
                 key=data["key"],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid application key data: {str(e)}")
+            raise ValidationError(f"Invalid application key data: {e!s}")
 
 
 class AddressRange:
     """Represents an address range for provisioners."""
 
     def __init__(self, low_address: str, high_address: str) -> None:
-        """Initialize an AddressRange instance.
+        """
+        Initialize an AddressRange instance.
 
         Args:
             low_address: Lower bound of the address range
             high_address: Upper bound of the address range
+
         """
         self._low_address = low_address
         self._high_address = high_address
@@ -168,8 +175,9 @@ class AddressRange:
         return self._high_address
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> "AddressRange":
-        """Create an AddressRange instance from dictionary data.
+    def from_dict(cls, data: dict[str, str]) -> "AddressRange":
+        """
+        Create an AddressRange instance from dictionary data.
 
         Args:
             data: Dictionary containing address range data
@@ -179,22 +187,25 @@ class AddressRange:
 
         Raises:
             ValidationError: If required fields are missing
+
         """
         try:
             return cls(low_address=data["lowAddress"], high_address=data["highAddress"])
         except KeyError as e:
-            raise ValidationError(f"Invalid address range data: {str(e)}")
+            raise ValidationError(f"Invalid address range data: {e!s}")
 
 
 class SceneRange:
     """Represents a scene range for provisioners."""
 
     def __init__(self, first_scene: str, last_scene: str) -> None:
-        """Initialize a SceneRange instance.
+        """
+        Initialize a SceneRange instance.
 
         Args:
             first_scene: First scene in the range
             last_scene: Last scene in the range
+
         """
         self._first_scene = first_scene
         self._last_scene = last_scene
@@ -210,8 +221,9 @@ class SceneRange:
         return self._last_scene
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> "SceneRange":
-        """Create a SceneRange instance from dictionary data.
+    def from_dict(cls, data: dict[str, str]) -> "SceneRange":
+        """
+        Create a SceneRange instance from dictionary data.
 
         Args:
             data: Dictionary containing scene range data
@@ -221,11 +233,12 @@ class SceneRange:
 
         Raises:
             ValidationError: If required fields are missing
+
         """
         try:
             return cls(first_scene=data["firstScene"], last_scene=data["lastScene"])
         except KeyError as e:
-            raise ValidationError(f"Invalid scene range data: {str(e)}")
+            raise ValidationError(f"Invalid scene range data: {e!s}")
 
 
 class Provisioner:
@@ -235,11 +248,12 @@ class Provisioner:
         self,
         provisioner_name: str,
         uuid: str,
-        allocated_unicast_range: List[AddressRange],
-        allocated_group_range: List[AddressRange],
-        allocated_scene_range: List[SceneRange],
+        allocated_unicast_range: list[AddressRange],
+        allocated_group_range: list[AddressRange],
+        allocated_scene_range: list[SceneRange],
     ) -> None:
-        """Initialize a Provisioner instance.
+        """
+        Initialize a Provisioner instance.
 
         Args:
             provisioner_name: Name of the provisioner
@@ -247,6 +261,7 @@ class Provisioner:
             allocated_unicast_range: List of allocated unicast address ranges
             allocated_group_range: List of allocated group address ranges
             allocated_scene_range: List of allocated scene ranges
+
         """
         self._provisioner_name = provisioner_name
         self._uuid = uuid
@@ -265,23 +280,24 @@ class Provisioner:
         return self._uuid
 
     @property
-    def allocated_unicast_range(self) -> List[AddressRange]:
+    def allocated_unicast_range(self) -> list[AddressRange]:
         """Get the allocated unicast ranges."""
         return self._allocated_unicast_range
 
     @property
-    def allocated_group_range(self) -> List[AddressRange]:
+    def allocated_group_range(self) -> list[AddressRange]:
         """Get the allocated group ranges."""
         return self._allocated_group_range
 
     @property
-    def allocated_scene_range(self) -> List[SceneRange]:
+    def allocated_scene_range(self) -> list[SceneRange]:
         """Get the allocated scene ranges."""
         return self._allocated_scene_range
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Provisioner":
-        """Create a Provisioner instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "Provisioner":
+        """
+        Create a Provisioner instance from dictionary data.
 
         Args:
             data: Dictionary containing provisioner data
@@ -291,6 +307,7 @@ class Provisioner:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             return cls(
@@ -307,7 +324,7 @@ class Provisioner:
                 ],
             )
         except (KeyError, ValidationError) as e:
-            raise ValidationError(f"Invalid provisioner data: {str(e)}")
+            raise ValidationError(f"Invalid provisioner data: {e!s}")
 
 
 class MeshConfiguration:
@@ -319,11 +336,12 @@ class MeshConfiguration:
         version: str,
         mesh_name: str,
         mesh_uuid: str,
-        net_keys: List[NetworkKey],
-        app_keys: List[ApplicationKey],
-        provisioners: List[Provisioner],
+        net_keys: list[NetworkKey],
+        app_keys: list[ApplicationKey],
+        provisioners: list[Provisioner],
     ) -> None:
-        """Initialize a MeshConfiguration instance.
+        """
+        Initialize a MeshConfiguration instance.
 
         Args:
             id: Configuration ID
@@ -333,6 +351,7 @@ class MeshConfiguration:
             net_keys: List of network keys
             app_keys: List of application keys
             provisioners: List of provisioners
+
         """
         self._id = id
         self._version = version
@@ -363,23 +382,24 @@ class MeshConfiguration:
         return self._mesh_uuid
 
     @property
-    def net_keys(self) -> List[NetworkKey]:
+    def net_keys(self) -> list[NetworkKey]:
         """Get the network keys."""
         return self._net_keys
 
     @property
-    def app_keys(self) -> List[ApplicationKey]:
+    def app_keys(self) -> list[ApplicationKey]:
         """Get the application keys."""
         return self._app_keys
 
     @property
-    def provisioners(self) -> List[Provisioner]:
+    def provisioners(self) -> list[Provisioner]:
         """Get the provisioners."""
         return self._provisioners
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MeshConfiguration":
-        """Create a MeshConfiguration instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "MeshConfiguration":
+        """
+        Create a MeshConfiguration instance from dictionary data.
 
         Args:
             data: Dictionary containing mesh configuration data
@@ -389,6 +409,7 @@ class MeshConfiguration:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             return cls(
@@ -402,10 +423,10 @@ class MeshConfiguration:
             )
         except KeyError as e:
             raise ValidationError(
-                f"Invalid mesh configuration data: Missing field {str(e)}"
+                f"Invalid mesh configuration data: Missing field {e!s}"
             )
         except ValidationError as e:
-            raise ValidationError(f"Invalid mesh configuration data: {str(e)}")
+            raise ValidationError(f"Invalid mesh configuration data: {e!s}")
 
 
 class Network:
@@ -418,10 +439,11 @@ class Network:
         name: str,
         creation_date: datetime,
         update_date: datetime,
-        mesh_config: Optional[MeshConfiguration] = None,
-        devices: Optional[List[Device]] = None,
+        mesh_config: MeshConfiguration | None = None,
+        devices: list[Device] | None = None,
     ) -> None:
-        """Initialize a Network instance.
+        """
+        Initialize a Network instance.
 
         Args:
             id: Network ID
@@ -431,6 +453,7 @@ class Network:
             update_date: Last update timestamp
             mesh_config: Optional mesh network configuration
             devices: Optional list of devices in the network
+
         """
         self._id = id
         self._network_key = network_key
@@ -467,7 +490,7 @@ class Network:
         return self._update_date
 
     @property
-    def mesh_config(self) -> Optional[MeshConfiguration]:
+    def mesh_config(self) -> MeshConfiguration | None:
         """Get the mesh configuration."""
         return self._mesh_config
 
@@ -480,14 +503,16 @@ class Network:
         """Update the last_updated timestamp to current time."""
         self._last_updated = datetime.now(UTC)
 
-    def get_devices(self, devices: List[Device]) -> List[Device]:
-        """Get all devices associated with this network.
+    def get_devices(self, devices: list[Device]) -> list[Device]:
+        """
+        Get all devices associated with this network.
 
         Args:
             devices: List of Device instances from the API
 
         Returns:
             List of Device instances belonging to this network
+
         """
         if self._devices is None:
             # Filter devices for this network
@@ -498,8 +523,9 @@ class Network:
 
         return self._devices
 
-    def get_device_by_id(self, device_id: str) -> Optional[Device]:
-        """Get a specific device by its unique ID.
+    def get_device_by_id(self, device_id: str) -> Device | None:
+        """
+        Get a specific device by its unique ID.
 
         Args:
             device_id: The unique ID of the device to find
@@ -509,6 +535,7 @@ class Network:
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return None
@@ -517,8 +544,9 @@ class Network:
             (device for device in self._devices if device.id == device_id), None
         )
 
-    def get_devices_by_type(self, device_type: str) -> List[Device]:
-        """Get all devices of a specific type.
+    def get_devices_by_type(self, device_type: str) -> list[Device]:
+        """
+        Get all devices of a specific type.
 
         Args:
             device_type: The type of devices to find (e.g., 'com.haefele.led.rgb')
@@ -528,6 +556,7 @@ class Network:
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return []
@@ -535,14 +564,16 @@ class Network:
         return [device for device in self._devices if device.type == device_type]
 
     @property
-    def device_types(self) -> Set[str]:
-        """Get all unique device types in this network.
+    def device_types(self) -> set[str]:
+        """
+        Get all unique device types in this network.
 
         Returns:
             Set of device type strings
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return set()
@@ -550,14 +581,16 @@ class Network:
         return {device.type for device in self._devices}
 
     @property
-    def lights(self) -> List[Device]:
-        """Get all light devices in the network.
+    def lights(self) -> list[Device]:
+        """
+        Get all light devices in the network.
 
         Returns:
             List of light Device instances
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return []
@@ -565,14 +598,16 @@ class Network:
         return [device for device in self._devices if device.is_light]
 
     @property
-    def switches(self) -> List[Device]:
-        """Get all switch devices in the network.
+    def switches(self) -> list[Device]:
+        """
+        Get all switch devices in the network.
 
         Returns:
             List of switch Device instances
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return []
@@ -580,14 +615,16 @@ class Network:
         return [device for device in self._devices if device.is_switch]
 
     @property
-    def sensors(self) -> List[Device]:
-        """Get all sensor devices in the network.
+    def sensors(self) -> list[Device]:
+        """
+        Get all sensor devices in the network.
 
         Returns:
             List of sensor Device instances
 
         Note:
             get_devices() must be called first to populate the device cache
+
         """
         if self._devices is None:
             return []
@@ -595,8 +632,9 @@ class Network:
         return [device for device in self._devices if device.is_sensor]
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Network":
-        """Create a Network instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "Network":
+        """
+        Create a Network instance from dictionary data.
 
         Args:
             data: Dictionary containing network data from API
@@ -606,6 +644,7 @@ class Network:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             network = cls(
@@ -627,13 +666,15 @@ class Network:
             return network
 
         except KeyError as e:
-            raise ValidationError(f"Missing required field in network data: {str(e)}")
+            raise ValidationError(f"Missing required field in network data: {e!s}")
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert the network instance to a dictionary.
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the network instance to a dictionary.
 
         Returns:
             Dictionary representation of the network
+
         """
         return {
             "id": self._id,

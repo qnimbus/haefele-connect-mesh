@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import HafeleUpdateCoordinator
-from .models.device import Device
 from .exceptions import HafeleAPIError
+from .models.device import Device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +34,10 @@ async def async_setup_entry(
 
     _LOGGER.debug(
         "Setting up switches. Available devices: %s",
-        [(d.id, getattr(d, "type", None), getattr(d, "is_socket", False)) for d in devices]
+        [
+            (d.id, getattr(d, "type", None), getattr(d, "is_socket", False))
+            for d in devices
+        ],
     )
 
     entities = []
@@ -45,7 +48,7 @@ async def async_setup_entry(
                 _LOGGER.debug(
                     "Creating switch entity for device %s (coordinator data: %s)",
                     device.id,
-                    coordinator.data
+                    coordinator.data,
                 )
                 entities.append(
                     HaefeleConnectMeshSwitch(coordinator, device, config_entry)
@@ -54,7 +57,7 @@ async def async_setup_entry(
                 _LOGGER.error(
                     "Error creating switch entity for device %s: %s",
                     device.id,
-                    str(err)
+                    str(err),
                 )
                 continue
 
@@ -64,7 +67,7 @@ async def async_setup_entry(
         _LOGGER.debug(
             "No switch entities created. Devices: %s, Coordinators: %s",
             devices,
-            coordinators.keys()
+            coordinators.keys(),
         )
 
 
@@ -114,7 +117,8 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 self.coordinator.data is not None
                 and isinstance(self.coordinator.data.get("state"), dict)
                 and "power" in self.coordinator.data["state"]
-                and (datetime.now(UTC) - self._device.last_updated).total_seconds() < 120
+                and (datetime.now(UTC) - self._device.last_updated).total_seconds()
+                < 120
             )
 
             return is_available
@@ -157,9 +161,7 @@ class HaefeleConnectMeshSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             self.async_write_ha_state()
         except Exception as err:
             _LOGGER.warning(
-                "Could not get initial state for %s: %s",
-                self._device.id,
-                str(err)
+                "Could not get initial state for %s: %s", self._device.id, str(err)
             )
 
             if last_state := await self.async_get_last_state():

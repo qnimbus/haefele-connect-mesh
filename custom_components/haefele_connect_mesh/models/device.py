@@ -1,15 +1,17 @@
 """Device models for the Häfele Connect Mesh API."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
-from ..exceptions import ValidationError
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
+
+from ..exceptions import ValidationError
 
 
 @dataclass
 class Element:
-    """Represents a device element in the mesh network.
+    """
+    Represents a device element in the mesh network.
 
     Elements are the basic building blocks of mesh devices, each representing
     a controllable component of the device.
@@ -17,11 +19,12 @@ class Element:
 
     device_id: str
     unicast_address: int
-    models: List[int]
+    models: list[int]
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Element":
-        """Create an Element instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "Element":
+        """
+        Create an Element instance from dictionary data.
 
         Args:
             data: Dictionary containing element data
@@ -31,6 +34,7 @@ class Element:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             return cls(
@@ -39,7 +43,7 @@ class Element:
                 models=[int(model) for model in data["models"]],
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid element data: {str(e)}")
+            raise ValidationError(f"Invalid element data: {e!s}")
 
 
 class DeviceType(Enum):
@@ -140,16 +144,15 @@ class DeviceType(Enum):
         """Get the manufacturer based on the device type prefix."""
         if self.value.startswith("de.ledvance."):
             return "LEDVANCE"
-        elif self.value.startswith("de.jung."):
+        if self.value.startswith("de.jung."):
             return "JUNG"
-        elif self.value.startswith("de.nimbus."):
+        if self.value.startswith("de.nimbus."):
             return "Nimbus"
-        elif self.value.startswith("com.haefele."):
+        if self.value.startswith("com.haefele."):
             return "Häfele"
-        elif self.value.startswith("com.generic."):
+        if self.value.startswith("com.generic."):
             return "Generic"
-        else:
-            return "Unknown"
+        return "Unknown"
 
     @classmethod
     def from_str(cls, type_str: str) -> "DeviceType":
@@ -161,7 +164,8 @@ class DeviceType(Enum):
 
 
 class Device:
-    """Represents a Häfele Connect Mesh device.
+    """
+    Represents a Häfele Connect Mesh device.
 
     Attributes:
         network_id: UUID of the network the device belongs to
@@ -176,6 +180,7 @@ class Device:
         unique_id: Unique device identifier
         device_key: Device encryption key
         elements: List of device mesh elements
+
     """
 
     def __init__(
@@ -184,16 +189,17 @@ class Device:
         unicast_address: int,
         id: str,
         name: str,
-        description: Optional[str],
+        description: str | None,
         ble_address: str,
         mac_bytes: str,
         bootloader_version: str,
         type: str,
         unique_id: str,
         device_key: str,
-        elements: List[Element],
+        elements: list[Element],
     ) -> None:
-        """Initialize a Device instance.
+        """
+        Initialize a Device instance.
 
         Args:
             network_id: UUID of the network the device belongs to
@@ -208,6 +214,7 @@ class Device:
             unique_id: Unique device identifier
             device_key: Device encryption key
             elements: List of device mesh elements
+
         """
         self._network_id = network_id
         self._unicast_address = unicast_address
@@ -244,7 +251,7 @@ class Device:
         return self._name
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """Get the device description."""
         return self._description
 
@@ -274,7 +281,7 @@ class Device:
         return self._device_key
 
     @property
-    def elements(self) -> List[Element]:
+    def elements(self) -> list[Element]:
         """Get the device elements."""
         return self._elements
 
@@ -288,8 +295,9 @@ class Device:
         self._last_updated = datetime.now(UTC)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Device":
-        """Create a Device instance from dictionary data.
+    def from_dict(cls, data: dict[str, Any]) -> "Device":
+        """
+        Create a Device instance from dictionary data.
 
         Args:
             data: Dictionary containing device data from API
@@ -299,6 +307,7 @@ class Device:
 
         Raises:
             ValidationError: If required fields are missing or invalid
+
         """
         try:
             return cls(
@@ -316,13 +325,15 @@ class Device:
                 elements=[Element.from_dict(elem) for elem in data["elements"]],
             )
         except (KeyError, ValueError) as e:
-            raise ValidationError(f"Invalid device data: {str(e)}")
+            raise ValidationError(f"Invalid device data: {e!s}")
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert the device instance to a dictionary.
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the device instance to a dictionary.
 
         Returns:
             Dictionary representation of the device
+
         """
         return {
             "networkId": self._network_id,
@@ -348,28 +359,34 @@ class Device:
 
     @property
     def is_light(self) -> bool:
-        """Check if the device is a light.
+        """
+        Check if the device is a light.
 
         Returns:
             bool: True if device is a light type
+
         """
         return self._type.is_light
 
     @property
     def is_switch(self) -> bool:
-        """Check if the device is a switch.
+        """
+        Check if the device is a switch.
 
         Returns:
             bool: True if device is a switch type
+
         """
         return self._type == "com.haefele.switch"
 
     @property
     def is_sensor(self) -> bool:
-        """Check if the device is a sensor.
+        """
+        Check if the device is a sensor.
 
         Returns:
             bool: True if device is a sensor type
+
         """
         return self._type.startswith("com.haefele.sensor")
 
@@ -385,9 +402,11 @@ class Device:
 
     @property
     def is_socket(self) -> bool:
-        """Check if the device is a socket.
+        """
+        Check if the device is a socket.
 
         Returns:
             bool: True if device is a socket type
+
         """
         return self._type.is_socket

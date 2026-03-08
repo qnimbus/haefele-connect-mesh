@@ -6,15 +6,15 @@ import logging
 from datetime import datetime
 
 from homeassistant.components.sensor import (
-    SensorEntity,
     SensorDeviceClass,
+    SensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 from .coordinator import HafeleUpdateCoordinator
@@ -32,7 +32,9 @@ async def async_setup_entry(
     runtime_data = config_entry.runtime_data
 
     entities = [
-        HaefeleLastUpdateSensor(runtime_data.coordinators[device.id], device, config_entry)
+        HaefeleLastUpdateSensor(
+            runtime_data.coordinators[device.id], device, config_entry
+        )
         for device in runtime_data.devices
     ]
 

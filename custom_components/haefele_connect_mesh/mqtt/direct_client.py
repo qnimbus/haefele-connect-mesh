@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
 
 try:
     import aiomqtt
+
     AIOMQTT_AVAILABLE = True
 except ImportError:
     AIOMQTT_AVAILABLE = False
@@ -16,7 +17,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class DirectMQTTClient:
-    """Wraps aiomqtt for a long-lived MQTT connection outside HA's MQTT component.
+    """
+    Wraps aiomqtt for a long-lived MQTT connection outside HA's MQTT component.
 
     Used when the user configures a custom broker instead of the one managed
     by HA's MQTT integration.
@@ -117,7 +119,9 @@ class DirectMQTTClient:
         """Publish *payload* to *topic*."""
         if not self._client or not self._connected:
             raise ConnectionError("MQTT client is not connected")
-        await self._client.publish(topic, payload.encode() if isinstance(payload, str) else payload)
+        await self._client.publish(
+            topic, payload.encode() if isinstance(payload, str) else payload
+        )
 
     # ------------------------------------------------------------------
     # Background message listener

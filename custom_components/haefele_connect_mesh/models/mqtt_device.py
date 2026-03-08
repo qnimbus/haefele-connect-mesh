@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
 
 
 @dataclass
 class MQTTDevice:
-    """Represents a Häfele device discovered via MQTT.
+    """
+    Represents a Häfele device discovered via MQTT.
 
     Provides the same interface as the cloud Device model so that
     platform entities (light, sensor, binary_sensor) can work with
@@ -51,12 +51,12 @@ class MQTTDevice:
         return any(t.lower() == "multiwhite" for t in self.device_types)
 
     @property
-    def bootloader_version(self) -> Optional[str]:
+    def bootloader_version(self) -> str | None:
         """Firmware version — not available via MQTT."""
         return None
 
     @property
-    def network_id(self) -> Optional[str]:
+    def network_id(self) -> str | None:
         """Network ID — not available via MQTT."""
         return None
 

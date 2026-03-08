@@ -1,7 +1,8 @@
 """Gateway model for Häfele Connect Mesh."""
 
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Any
+
 from ..exceptions import ValidationError
 
 
@@ -15,7 +16,7 @@ class Gateway:
     connected: bool
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Gateway":
+    def from_dict(cls, data: dict[str, Any]) -> "Gateway":
         """Create a Gateway instance from dictionary data."""
         try:
             return cls(
@@ -25,4 +26,4 @@ class Gateway:
                 connected=data["connected"],
             )
         except KeyError as e:
-            raise ValidationError(f"Invalid gateway data: {str(e)}")
+            raise ValidationError(f"Invalid gateway data: {e!s}")

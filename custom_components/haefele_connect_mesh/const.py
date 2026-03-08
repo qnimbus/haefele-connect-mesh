@@ -34,4 +34,6 @@ MAX_MIREDS = 500  # Maximum color temperature in mireds
 
 DEFAULT_SCAN_INTERVAL = 30  # Default scan interval in seconds
 DEFAULT_NEW_DEVICES_CHECK_INTERVAL = 15  # Default check interval in minutes
-DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL = 5  # Default device details update interval in minutes
+DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL = (
+    5  # Default device details update interval in minutes
+)

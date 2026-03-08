@@ -1,4 +1,4 @@
-from typing import Optional, Any, Dict
+from typing import Any
 
 
 class HafeleAPIError(Exception):
@@ -7,17 +7,19 @@ class HafeleAPIError(Exception):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        error_code: Optional[str] = None,
-        response: Optional[Dict[str, Any]] = None,
+        status_code: int | None = None,
+        error_code: str | None = None,
+        response: dict[str, Any] | None = None,
     ) -> None:
-        """Initialize the API error.
+        """
+        Initialize the API error.
 
         Args:
             message: Human-readable error message
             status_code: HTTP status code from the API response
             error_code: Error code returned by the API (e.g., 'GATEWAY_UNAVAILABLE')
             response: Complete error response data from the API
+
         """
         super().__init__(message)
         self.message = message
@@ -40,10 +42,8 @@ class HafeleAPIError(Exception):
 class AuthenticationError(Exception):
     """Raised when there are authentication issues with the API."""
 
-    pass
 
 
 class ValidationError(Exception):
     """Raised when there are validation errors with the request parameters."""
 
-    pass

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any
-from datetime import datetime, UTC
-
 import asyncio
 import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -18,31 +17,29 @@ from homeassistant.components.light import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util.color import (
-    value_to_brightness,
     brightness_to_value,
+    value_to_brightness,
 )
 from homeassistant.util.percentage import percentage_to_ranged_value
 
+from . import MQTTGroup
 from .const import (
-    DOMAIN,
-    NAME,
-    BRIGHTNESS_SCALE_PERCENTAGE,
     BRIGHTNESS_SCALE_MESH,
-    BRIGHTNESS_SCALE_HA,
-    MIN_KELVIN,
+    BRIGHTNESS_SCALE_PERCENTAGE,
+    DOMAIN,
     MAX_KELVIN,
+    MIN_KELVIN,
 )
 from .coordinator import HafeleUpdateCoordinator
-from .mqtt.coordinator import HafeleMQTTCoordinator
 from .models.device import Device as HafeleDevice
 from .models.mqtt_device import MQTTDevice
-from . import MQTTGroup
+from .mqtt.coordinator import HafeleMQTTCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +60,9 @@ async def async_setup_entry(
 
     lights = [device for device in runtime_data.devices if device.is_light]
     entities: list = [
-        HaefeleConnectMeshLight(runtime_data.coordinators[light.id], light, config_entry)
+        HaefeleConnectMeshLight(
+            runtime_data.coordinators[light.id], light, config_entry
+        )
         for light in lights
     ]
 
@@ -75,13 +74,15 @@ async def async_setup_entry(
             if str(addr) in runtime_data.coordinators
         ]
         if member_coordinators:
-            entities.append(HafeleMQTTGroupLight(
-                group,
-                member_coordinators,
-                runtime_data.prefix,
-                runtime_data.direct_client,
-                config_entry,
-            ))
+            entities.append(
+                HafeleMQTTGroupLight(
+                    group,
+                    member_coordinators,
+                    runtime_data.prefix,
+                    runtime_data.direct_client,
+                    config_entry,
+                )
+            )
 
     if entities:
         async_add_entities(entities)
@@ -171,9 +172,11 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
             # in a long time should not be reported as unavailable.
             is_available = has_data
         else:
-            is_available = has_data and (
-                datetime.now(UTC) - self._device.last_updated
-            ).total_seconds() < _CLOUD_FRESHNESS_SECONDS
+            is_available = (
+                has_data
+                and (datetime.now(UTC) - self._device.last_updated).total_seconds()
+                < _CLOUD_FRESHNESS_SECONDS
+            )
 
         return is_available
 
@@ -217,7 +220,9 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
             new_state = {
                 "power": True,
                 "lightness": current.get("lightness", 0),
-                "lastLightness": current.get("lastLightness", current.get("lightness", 0)),
+                "lastLightness": current.get(
+                    "lastLightness", current.get("lightness", 0)
+                ),
             }
 
             if ATTR_BRIGHTNESS in kwargs:
@@ -291,16 +296,22 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                 and new_state.get("lightness", 0) == 0
                 and hasattr(self.coordinator, "async_request_state")
             ):
+
                 async def _fetch_brightness() -> None:
                     await asyncio.sleep(_BRIGHTNESS_FETCH_DELAY)
                     await self.coordinator.async_request_state()
+
                 self.hass.async_create_task(_fetch_brightness())
 
         except (ServiceValidationError, HomeAssistantError):
             raise
         except Exception as ex:
-            _LOGGER.exception("Unexpected error turning on %s", self.entity_id or self._device.name)
-            raise HomeAssistantError(f"Unexpected error turning on {self.entity_id or self._device.name}") from ex
+            _LOGGER.exception(
+                "Unexpected error turning on %s", self.entity_id or self._device.name
+            )
+            raise HomeAssistantError(
+                f"Unexpected error turning on {self.entity_id or self._device.name}"
+            ) from ex
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
@@ -313,13 +324,19 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
                 "state": {
                     "power": False,
                     "lightness": current.get("lightness", 0),
-                    "lastLightness": current.get("lastLightness", current.get("lightness", 0)),
+                    "lastLightness": current.get(
+                        "lastLightness", current.get("lightness", 0)
+                    ),
                 }
             }
             self.async_write_ha_state()
 
         except Exception as ex:
-            _LOGGER.error("Failed to turn off light %s: %s", self.entity_id or self._device.name, str(ex))
+            _LOGGER.error(
+                "Failed to turn off light %s: %s",
+                self.entity_id or self._device.name,
+                str(ex),
+            )
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -377,7 +394,8 @@ class HaefeleConnectMeshLight(CoordinatorEntity, LightEntity, RestoreEntity):
 
 
 class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
-    """A light entity representing a Häfele BLE Mesh group.
+    """
+    A light entity representing a Häfele BLE Mesh group.
 
     Commands are published to the group topic so all members respond
     simultaneously. State is aggregated from the individual member coordinators
@@ -467,7 +485,9 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
         try:
             new_state: dict = {"power": True}
             if ATTR_BRIGHTNESS in kwargs:
-                lightness = brightness_to_value(BRIGHTNESS_SCALE_PERCENTAGE, kwargs[ATTR_BRIGHTNESS])
+                lightness = brightness_to_value(
+                    BRIGHTNESS_SCALE_PERCENTAGE, kwargs[ATTR_BRIGHTNESS]
+                )
                 lightness_frac = lightness / 100
                 await self._publish("lightness", lightness_frac)
                 new_state["lightness"] = round(lightness_frac * 65535)
@@ -480,15 +500,19 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
                 if ATTR_BRIGHTNESS not in kwargs and current.get("lightness", 0) == 0:
                     fetch_needed.append(coordinator)
             if fetch_needed:
+
                 async def _fetch_group_brightness() -> None:
                     await asyncio.sleep(_BRIGHTNESS_FETCH_DELAY)
                     for coord in fetch_needed:
                         await coord.async_request_state()
                         await asyncio.sleep(0.1)
+
                 self.hass.async_create_task(_fetch_group_brightness())
         except Exception:
             _LOGGER.exception("Failed to turn on group '%s'", self._group.group_name)
-            raise HomeAssistantError(f"Failed to turn on group {self._group.group_name}")
+            raise HomeAssistantError(
+                f"Failed to turn on group {self._group.group_name}"
+            )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the group."""
@@ -497,18 +521,21 @@ class HafeleMQTTGroupLight(LightEntity, RestoreEntity):
             _LOGGER.debug("Group '%s' turn_off published", self._group.group_name)
             for coordinator in self._coordinators:
                 current = (coordinator.data or {}).get("state", {})
-                coordinator.async_set_updated_data({"state": {**current, "power": False}})
+                coordinator.async_set_updated_data(
+                    {"state": {**current, "power": False}}
+                )
         except Exception:
             _LOGGER.exception("Failed to turn off group '%s'", self._group.group_name)
-            raise HomeAssistantError(f"Failed to turn off group {self._group.group_name}")
+            raise HomeAssistantError(
+                f"Failed to turn off group {self._group.group_name}"
+            )
 
     async def _publish(self, command: str, payload: Any) -> None:
         """Publish a command to the group topic."""
         import homeassistant.components.mqtt as ha_mqtt  # noqa: PLC0415
+
         topic = f"{self._prefix}/groups/{self._group.group_name}/{command}"
-        if isinstance(payload, bool):
-            payload_str = json.dumps(payload)
-        elif isinstance(payload, (dict, list)):
+        if isinstance(payload, bool) or isinstance(payload, (dict, list)):
             payload_str = json.dumps(payload)
         else:
             payload_str = str(payload)

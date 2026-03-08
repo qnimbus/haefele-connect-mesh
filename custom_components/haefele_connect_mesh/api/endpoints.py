@@ -1,4 +1,5 @@
-"""Häfele Connect Mesh API endpoint definitions.
+"""
+Häfele Connect Mesh API endpoint definitions.
 
 This module contains all API endpoint URLs and related constants used
 by the API client to interact with the Häfele Connect Mesh API.

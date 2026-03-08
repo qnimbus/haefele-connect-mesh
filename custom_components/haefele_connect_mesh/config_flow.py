@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import voluptuous as vol
-import aiohttp
 
 try:
     import aiomqtt
@@ -16,7 +16,6 @@ except ImportError:
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_TOKEN
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -31,30 +30,30 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .const import (
-    DOMAIN,
-    CONF_NETWORK_ID,
-    CONF_CONNECTION_TYPE,
-    CONNECTION_TYPE_MQTT,
-    CONNECTION_TYPE_CLOUD,
-    CONF_MQTT_TOPIC_PREFIX,
-    DEFAULT_MQTT_TOPIC_PREFIX,
-    CONF_MQTT_USE_HA,
-    CONF_MQTT_BROKER,
-    CONF_MQTT_PORT,
-    CONF_MQTT_USERNAME,
-    CONF_MQTT_PASSWORD,
-    DEFAULT_MQTT_PORT,
-    CONF_MQTT_ADD_GROUPS,
-    DEFAULT_MQTT_ADD_GROUPS,
-    CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
-    CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
-    DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
-    CONF_NEW_DEVICES_CHECK_INTERVAL,
-    DEFAULT_NEW_DEVICES_CHECK_INTERVAL,
-)
 from .api.client import HafeleClient
+from .const import (
+    CONF_CONNECTION_TYPE,
+    CONF_DEVICE_DETAILS_UPDATE_INTERVAL,
+    CONF_MQTT_ADD_GROUPS,
+    CONF_MQTT_BROKER,
+    CONF_MQTT_PASSWORD,
+    CONF_MQTT_PORT,
+    CONF_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_USE_HA,
+    CONF_MQTT_USERNAME,
+    CONF_NETWORK_ID,
+    CONF_NEW_DEVICES_CHECK_INTERVAL,
+    CONF_SCAN_INTERVAL,
+    CONNECTION_TYPE_CLOUD,
+    CONNECTION_TYPE_MQTT,
+    DEFAULT_DEVICE_DETAILS_UPDATE_INTERVAL,
+    DEFAULT_MQTT_ADD_GROUPS,
+    DEFAULT_MQTT_PORT,
+    DEFAULT_MQTT_TOPIC_PREFIX,
+    DEFAULT_NEW_DEVICES_CHECK_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .exceptions import HafeleAPIError
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,7 +65,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
         """Return the options flow handler."""
         return OptionsFlowHandler(config_entry)
 
@@ -257,7 +258,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={"connect_mesh_url": "https://cloud.connect-mesh.io/developer"},
+            description_placeholders={
+                "connect_mesh_url": "https://cloud.connect-mesh.io/developer"
+            },
         )
 
     # ------------------------------------------------------------------
@@ -343,9 +346,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({
-                vol.Required(CONF_API_TOKEN): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_TOKEN): str,
+                }
+            ),
             errors=errors,
             description_placeholders={
                 "error_detail": errors.get("base", ""),
@@ -357,7 +362,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # Migration
     # ------------------------------------------------------------------
 
-    async def async_migrate_entry(self, config_entry: config_entries.ConfigEntry) -> bool:
+    async def async_migrate_entry(
+        self, config_entry: config_entries.ConfigEntry
+    ) -> bool:
         """Migrate old entry."""
         _LOGGER.debug("Migrating from version %s", config_entry.version)
 
@@ -424,12 +431,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        schema = vol.Schema({
-            vol.Required(
-                CONF_MQTT_ADD_GROUPS,
-                default=self._entry.options.get(CONF_MQTT_ADD_GROUPS, DEFAULT_MQTT_ADD_GROUPS),
-            ): BooleanSelector(),
-        })
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_MQTT_ADD_GROUPS,
+                    default=self._entry.options.get(
+                        CONF_MQTT_ADD_GROUPS, DEFAULT_MQTT_ADD_GROUPS
+                    ),
+                ): BooleanSelector(),
+            }
+        )
         return self.async_show_form(step_id="mqtt_options", data_schema=schema)
 
     async def async_step_cloud_options(
@@ -508,4 +519,3 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 }
             ),
         )
-
