@@ -43,7 +43,5 @@ class AuthenticationError(Exception):
     """Raised when there are authentication issues with the API."""
 
 
-
 class ValidationError(Exception):
     """Raised when there are validation errors with the request parameters."""
-

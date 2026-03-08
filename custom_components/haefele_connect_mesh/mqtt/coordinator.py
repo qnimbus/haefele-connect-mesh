@@ -34,7 +34,12 @@ SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall U
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
 KNOWN_OPCODES: frozenset[str] = (
-    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | SCENE_OPCODES | _STATUS_OPCODES
+    _ONOFF_OPCODES
+    | _LIGHTNESS_OPCODES
+    | _CTL_OPCODES
+    | _HSL_OPCODES
+    | SCENE_OPCODES
+    | _STATUS_OPCODES
 )
 
 
@@ -91,7 +96,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._unsubscribe = None
 
     async def async_request_state(self) -> None:
-        """Request current device state from the gateway.
+        """
+        Request current device state from the gateway.
 
         Uses ctlGet/hslGet for capable devices so that a single response
         covers both lightness and color temperature/HSL — important after

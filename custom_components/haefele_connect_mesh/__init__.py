@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from homeassistant.components.mqtt.models import ReceiveMessage
 
 import homeassistant.helpers.config_validation as cv
-import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
@@ -513,8 +512,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         # Scene recall: stagger state polls to avoid flooding the
                         # MQTT publish queue with N simultaneous powerGet/lightnessGet
                         # pairs. One request every 100 ms keeps the queue shallow.
-                        # BLE Mesh retransmits the same event 2–3× with different
-                        # sequence numbers — skip if a poll is already in flight.
+                        # BLE Mesh retransmits the same event 2-3x with different
+                        # sequence numbers - skip if a poll is already in flight.
                         if dest_addr in _active_scene_polls:
                             return  # retransmit — poll already in flight for this group
                         _active_scene_polls.add(dest_addr)
@@ -588,9 +587,8 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Initial state poll: stagger requests across devices to avoid flooding
         # the MQTT publish queue with N simultaneous powerGet/lightnessGet pairs.
-        async def _staggered_initial_poll(
-            coords: list[HafeleMQTTCoordinator] = list(coordinators.values()),
-        ) -> None:
+        async def _staggered_initial_poll() -> None:
+            coords = list(coordinators.values())
             for i, coordinator in enumerate(coords):
                 if i > 0:
                     await asyncio.sleep(MQTT_POLL_STAGGER_DELAY)
@@ -647,9 +645,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await coordinator.async_shutdown()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
+    if unload_ok and entry_data.direct_client:
         # Disconnect the direct MQTT client if one was created
-        if entry_data.direct_client:
-            await entry_data.direct_client.async_disconnect()
+        await entry_data.direct_client.async_disconnect()
 
     return unload_ok

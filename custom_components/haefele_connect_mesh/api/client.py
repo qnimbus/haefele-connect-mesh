@@ -131,44 +131,33 @@ class HafeleClient:
         """
         logger.debug("Fetching networks")
 
-        try:
-            response = await self._get(Endpoints.NETWORKS.value)
-            networks_data = await response.json()
+        response = await self._get(Endpoints.NETWORKS.value)
+        networks_data = await response.json()
 
-            logger.debug("Successfully fetched network data")
-            logger.debug("Network response data: %s", networks_data)
+        logger.debug("Successfully fetched network data")
+        logger.debug("Network response data: %s", networks_data)
 
-            # Convert to list if single dict is returned
-            if isinstance(networks_data, dict):
-                networks_data = [networks_data]
+        # Convert to list if single dict is returned
+        if isinstance(networks_data, dict):
+            networks_data = [networks_data]
 
-            # Fetch network details for each network
-            return [
-                await self.get_network_details(network["id"])
-                for network in networks_data
-            ]
-
-        except HafeleAPIError:
-            # Re-raise since _get already handles proper error wrapping
-            raise
+        # Fetch network details for each network
+        return [
+            await self.get_network_details(network["id"]) for network in networks_data
+        ]
 
     async def get_gateways(self) -> list[Gateway]:
         """Fetch all available gateways."""
-        try:
-            response = await self._get(Endpoints.GATEWAYS.value)
-            gateways_data = await response.json()
+        response = await self._get(Endpoints.GATEWAYS.value)
+        gateways_data = await response.json()
 
-            logger.debug("Successfully fetched gateways data")
-            logger.debug("Gateways response data: %s", gateways_data)
+        logger.debug("Successfully fetched gateways data")
+        logger.debug("Gateways response data: %s", gateways_data)
 
-            if isinstance(gateways_data, dict):
-                gateways_data = [gateways_data]
+        if isinstance(gateways_data, dict):
+            gateways_data = [gateways_data]
 
-            return [Gateway.from_dict(gateway) for gateway in gateways_data]
-
-        except HafeleAPIError:
-            # Re-raise since _get already handles proper error wrapping
-            raise
+        return [Gateway.from_dict(gateway) for gateway in gateways_data]
 
     async def gateway_ping(self, gateway_id: str) -> tuple[bool, int | None]:
         """
@@ -233,39 +222,34 @@ class HafeleClient:
         endpoint = Endpoints.NETWORK_DETAIL.format(id=network_id)
         logger.debug("Fetching network details from endpoint: %s", endpoint)
 
-        try:
-            response = await self._get(endpoint)
-            network_data = await response.json()
+        response = await self._get(endpoint)
+        network_data = await response.json()
 
-            def recursive_json_decode(data: Any) -> Any:
-                if isinstance(data, dict):
-                    for key, value in data.items():
-                        if isinstance(value, str):
-                            try:
-                                decoded_value = json.loads(value)
-                                data[key] = recursive_json_decode(decoded_value)
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-                        else:
-                            data[key] = recursive_json_decode(value)
-                elif isinstance(data, list):
-                    for index, item in enumerate(data):
-                        data[index] = recursive_json_decode(item)
-                return data
+        def recursive_json_decode(data: Any) -> Any:
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if isinstance(value, str):
+                        try:
+                            decoded_value = json.loads(value)
+                            data[key] = recursive_json_decode(decoded_value)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    else:
+                        data[key] = recursive_json_decode(value)
+            elif isinstance(data, list):
+                for index, item in enumerate(data):
+                    data[index] = recursive_json_decode(item)
+            return data
 
-            network_data = recursive_json_decode(network_data)
+        network_data = recursive_json_decode(network_data)
 
-            logger.debug("Successfully fetched network data for ID: %s", network_id)
-            logger.debug(
-                "Network response data (truncated): %s",
-                {k: (v if k != "network" else "...") for k, v in network_data.items()},
-            )
+        logger.debug("Successfully fetched network data for ID: %s", network_id)
+        logger.debug(
+            "Network response data (truncated): %s",
+            {k: (v if k != "network" else "...") for k, v in network_data.items()},
+        )
 
-            return Network.from_dict(network_data)
-
-        except HafeleAPIError:
-            # Re-raise since _get already handles proper error wrapping
-            raise
+        return Network.from_dict(network_data)
 
     async def get_devices(self) -> list[Device]:
         """
@@ -366,9 +350,7 @@ class HafeleClient:
 
             except ValidationError as e:
                 logger.error("Failed to parse device data: %s", str(e))
-                raise ValidationError(
-                    f"Invalid device data received from API: {e!s}"
-                )
+                raise ValidationError(f"Invalid device data received from API: {e!s}")
 
         except HafeleAPIError:
             # Re-raise since _get already handles proper error wrapping
