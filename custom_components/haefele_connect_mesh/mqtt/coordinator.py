@@ -19,15 +19,15 @@ from .direct_client import DirectMQTTClient
 _LOGGER = logging.getLogger(__name__)
 
 # BLE Mesh opcodes we decode from hafele/rawMessage
-# Set Unack = physical-change push; Status = response to our Get commands
-_ONOFF_OPCODES = frozenset(
-    {"008203", "008204", "008207"}
-)  # Generic OnOff Set Unack + Status + Set (with ack)
-_LIGHTNESS_OPCODES = frozenset(
-    {"00824D", "00824E"}
-)  # Light Lightness Set Unack + Status
-_CTL_OPCODES = frozenset({"008262", "008263"})  # Light CTL Set Unack + Status
-_HSL_OPCODES = frozenset({"008278", "008279"})  # Light HSL Set Unack + Status
+# Only Set Unack / Set opcodes are processed from rawMessage.
+# Status opcodes (even-numbered: 008204, 00824E, 008263, 008279) are
+# responses to our Get commands and arrive on the per-device status topic
+# as well — processing them here would double every state write for no
+# benefit, so they are intentionally excluded.
+_ONOFF_OPCODES = frozenset({"008203", "008207"})  # OnOff Set Unack + Set (with ack)
+_LIGHTNESS_OPCODES = frozenset({"00824D"})  # Light Lightness Set Unack
+_CTL_OPCODES = frozenset({"008262"})  # Light CTL Set Unack
+_HSL_OPCODES = frozenset({"008278"})  # Light HSL Set Unack
 SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
@@ -124,6 +124,9 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Merge into existing state so partial updates don't lose fields
         current_state = (self.data or {}).get("state", {})
         merged = {**current_state, **normalized}
+
+        if merged == current_state:
+            return  # nothing changed — skip write and HA state cascade
 
         self.device.update_timestamp()
         self.async_set_updated_data({"state": merged})
@@ -328,6 +331,10 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         current_state = (self.data or {}).get("state", {})
         merged = {**current_state, **normalized}
+
+        if merged == current_state:
+            return  # nothing changed — skip write and HA state cascade
+
         self.device.update_timestamp()
         self.async_set_updated_data({"state": merged})
         _LOGGER.debug(
