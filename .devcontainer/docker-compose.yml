@@ -9,6 +9,7 @@ services:
       - ..:/workspaces/haefele-connect-mesh:cached
       - pip-cache:/home/vscode/.cache/pip
       - pip-local:/home/vscode/.local/lib
+      - pip-bin:/home/vscode/.local/bin
       - npm-cache:/home/vscode/.npm
     command: sleep infinity
 
@@ -26,4 +27,5 @@ volumes:
   mosquitto-data:
   pip-cache:
   pip-local:
+  pip-bin:
   npm-cache:
