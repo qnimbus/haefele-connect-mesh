@@ -35,11 +35,13 @@ from .const import (
     DEFAULT_MQTT_ADD_GROUPS,
     DEFAULT_MQTT_TOPIC_PREFIX,
     DOMAIN,
+    MQTT_POLL_STAGGER_DELAY,
 )
 from .coordinator import HafeleUpdateCoordinator
 from .exceptions import HafeleAPIError
 from .models.mqtt_device import MQTTDevice
 from .mqtt.coordinator import KNOWN_OPCODES as MQTT_KNOWN_OPCODES
+from .mqtt.coordinator import SCENE_OPCODES as MQTT_SCENE_OPCODES
 from .mqtt.coordinator import HafeleMQTTCoordinator
 from .mqtt.direct_client import DirectMQTTClient
 
@@ -504,8 +506,39 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if coordinator is None and dest_addr is not None:
                 group_coordinators = group_addr_to_coordinators.get(dest_addr)
                 if group_coordinators:
-                    for gc in group_coordinators:
-                        gc.handle_raw_message(opcode, payload_hex)
+                    if opcode in MQTT_SCENE_OPCODES:
+                        # Scene recall: stagger state polls to avoid flooding the
+                        # MQTT publish queue with N simultaneous powerGet/lightnessGet
+                        # pairs. One request every 100 ms keeps the queue shallow.
+                        async def _staggered_scene_poll(
+                            coords: list[HafeleMQTTCoordinator] = group_coordinators,
+                            op: str = opcode,
+                            pay: str = payload_hex,
+                        ) -> None:
+                            p_bytes = bytes.fromhex(pay) if pay else b""
+                            scene_num = (
+                                int.from_bytes(p_bytes[0:2], "little")
+                                if len(p_bytes) >= 2
+                                else -1
+                            )
+                            for i, gc in enumerate(coords):
+                                if i > 0:
+                                    await asyncio.sleep(MQTT_POLL_STAGGER_DELAY)
+                                _LOGGER.debug(
+                                    "rawMessage: scene recall (opcode=%s, scene=%d)"
+                                    " for %s — requesting state",
+                                    op,
+                                    scene_num,
+                                    gc.device.name,
+                                )
+                                await gc.async_request_state()
+
+                        hass.async_create_background_task(
+                            _staggered_scene_poll(), "haefele_scene_poll"
+                        )
+                    else:
+                        for gc in group_coordinators:
+                            gc.handle_raw_message(opcode, payload_hex)
                     return
 
             if coordinator is None:
@@ -540,10 +573,19 @@ async def _async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         entry.async_on_unload(_unsub_raw)
 
-        # Initial burst: request state from all devices so they become available
-        # immediately without waiting for a physical event.
-        for coordinator in coordinators.values():
-            hass.async_create_task(coordinator.async_request_state())
+        # Initial state poll: stagger requests across devices to avoid flooding
+        # the MQTT publish queue with N simultaneous powerGet/lightnessGet pairs.
+        async def _staggered_initial_poll(
+            coords: list[HafeleMQTTCoordinator] = list(coordinators.values()),
+        ) -> None:
+            for i, coordinator in enumerate(coords):
+                if i > 0:
+                    await asyncio.sleep(MQTT_POLL_STAGGER_DELAY)
+                await coordinator.async_request_state()
+
+        hass.async_create_background_task(
+            _staggered_initial_poll(), "haefele_initial_state_poll"
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

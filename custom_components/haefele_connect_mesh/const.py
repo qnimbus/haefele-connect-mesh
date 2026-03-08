@@ -22,6 +22,10 @@ CONF_MQTT_PASSWORD = "password"
 DEFAULT_MQTT_PORT = 1883
 CONF_MQTT_ADD_GROUPS = "add_group_entities"
 DEFAULT_MQTT_ADD_GROUPS = False
+# Delay (seconds) between consecutive MQTT state-request publishes when polling
+# multiple devices in sequence (startup burst, scene recall fan-out).
+# Keeps the MQTT publish queue shallow without meaningfully delaying responses.
+MQTT_POLL_STAGGER_DELAY = 0.1
 # Device Capabilities
 
 BRIGHTNESS_SCALE_PERCENTAGE = (1, 100)  # Percentage

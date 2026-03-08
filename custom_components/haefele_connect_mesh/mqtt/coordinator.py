@@ -28,11 +28,11 @@ _LIGHTNESS_OPCODES = frozenset(
 )  # Light Lightness Set Unack + Status
 _CTL_OPCODES = frozenset({"008262", "008263"})  # Light CTL Set Unack + Status
 _HSL_OPCODES = frozenset({"008278", "008279"})  # Light HSL Set Unack + Status
-_SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
+SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
 
 # Union of all opcodes we actively decode — used by __init__.py for richer "ignored" logging
 KNOWN_OPCODES: frozenset[str] = (
-    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | _SCENE_OPCODES
+    _ONOFF_OPCODES | _LIGHTNESS_OPCODES | _CTL_OPCODES | _HSL_OPCODES | SCENE_OPCODES
 )
 
 
@@ -302,7 +302,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 normalized["hue"] = hue_mesh / 65535 * 360
                 normalized["saturation"] = sat_mesh / 65535
 
-        elif opcode in _SCENE_OPCODES:
+        elif opcode in SCENE_OPCODES:
             # Bytes 0-1: Scene Number uint16 LE; Byte 2: TID.
             # A scene recall sets an arbitrary combination of lightness/color/power
             # that we cannot decode locally — poll the gateway for the actual state.
