@@ -140,6 +140,10 @@ class DirectMQTTClient:
                         _LOGGER.error(
                             "Error in MQTT callback for topic %s: %s", topic, err
                         )
+                # Yield to the event loop between messages so that bursts of
+                # incoming responses (e.g. after a scene recall) do not block
+                # the event loop for the combined duration of all callbacks.
+                await asyncio.sleep(0)
         except asyncio.CancelledError:
             _LOGGER.debug("MQTT message listener cancelled")
         except Exception as err:
