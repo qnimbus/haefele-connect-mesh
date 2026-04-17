@@ -290,7 +290,6 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if len(p) >= 2:
                 lightness = int.from_bytes(p[0:2], "little")
                 normalized["lightness"] = lightness
-                normalized["power"] = bool(lightness)
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
 
@@ -300,7 +299,6 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lightness = int.from_bytes(p[0:2], "little")
                 temp_kelvin = int.from_bytes(p[2:4], "little")
                 normalized["lightness"] = lightness
-                normalized["power"] = bool(lightness)
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
                 normalized["temperature"] = round(
@@ -323,9 +321,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 hue_mesh = int.from_bytes(p[2:4], "little")
                 sat_mesh = int.from_bytes(p[4:6], "little")
                 normalized["lightness"] = lightness
-                normalized["power"] = bool(lightness)
-                if lightness > 0:
-                    normalized["lastLightness"] = lightness
+
+                normalized["lastLightness"] = lightness
                 normalized["hue"] = hue_mesh / 65535 * 360
                 normalized["saturation"] = sat_mesh / 65535
 
