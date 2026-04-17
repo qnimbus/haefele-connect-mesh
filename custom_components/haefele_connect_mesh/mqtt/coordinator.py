@@ -24,13 +24,15 @@ _LOGGER = logging.getLogger(__name__)
 # responses to our Get commands and arrive on the per-device status topic
 # as well — processing them here would double every state write for no
 # benefit, so they are intentionally excluded.
-_ONOFF_OPCODES = frozenset({"008203", "008207"})  # OnOff Set Unack + Set (with ack)
+# OnOff Set Unack + Set (with ack)
+_ONOFF_OPCODES = frozenset({"008203", "008207"})
 _LIGHTNESS_OPCODES = frozenset({"00824D"})  # Light Lightness Set Unack
 _CTL_OPCODES = frozenset({"008262"})  # Light CTL Set Unack
 _HSL_OPCODES = frozenset({"008278"})  # Light HSL Set Unack
 # Status opcodes silently ignored on rawMessage (handled via status topic)
 _STATUS_OPCODES = frozenset({"008204", "00824E", "008263", "008279"})
-SCENE_OPCODES = frozenset({"008242", "008243"})  # Scene Recall + Scene Recall Unack
+# Scene Recall + Scene Recall Unack
+SCENE_OPCODES = frozenset({"008242", "008243"})
 
 # Union of all opcodes we actively decode — used by __init__.py for richer
 # "ignored" logging
@@ -106,7 +108,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         gets = [self._publish_get("powerGet")]
         if self.device.supports_hsl:
-            gets.append(self._publish_get("hslGet"))  # lightness + hue + saturation
+            # lightness + hue + saturation
+            gets.append(self._publish_get("hslGet"))
         elif self.device.supports_color_temp:
             gets.append(self._publish_get("ctlGet"))  # lightness + temperature
         else:
@@ -123,7 +126,8 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             payload = json.loads(msg.payload)
         except (json.JSONDecodeError, TypeError):
-            _LOGGER.warning("Received invalid JSON on %s: %s", msg.topic, msg.payload)
+            _LOGGER.warning("Received invalid JSON on %s: %s",
+                            msg.topic, msg.payload)
             return
 
         normalized = self._normalize(payload)
@@ -171,9 +175,13 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             try:
                 v = float(raw)
                 # API delivers 0.0–1.0; convert to mesh 0–65535
-                result["lightness"] = round(v * 65535)
-                if result["lightness"] > 0:
-                    result["lastLightness"] = result["lightness"]
+                lightness = round(v * 65535)
+                result["lightness"] = lightness
+                if lightness > 0:
+                    result["power"] = True
+                    result["lastLightness"] = lightness
+                else:
+                    result["power"] = False
             except (ValueError, TypeError):
                 pass
 
@@ -282,6 +290,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if len(p) >= 2:
                 lightness = int.from_bytes(p[0:2], "little")
                 normalized["lightness"] = lightness
+                normalized["power"] = bool(lightness)
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
 
@@ -291,6 +300,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lightness = int.from_bytes(p[0:2], "little")
                 temp_kelvin = int.from_bytes(p[2:4], "little")
                 normalized["lightness"] = lightness
+                normalized["power"] = bool(lightness)
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
                 normalized["temperature"] = round(
@@ -313,6 +323,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 hue_mesh = int.from_bytes(p[2:4], "little")
                 sat_mesh = int.from_bytes(p[4:6], "little")
                 normalized["lightness"] = lightness
+                normalized["power"] = bool(lightness)
                 if lightness > 0:
                     normalized["lastLightness"] = lightness
                 normalized["hue"] = hue_mesh / 65535 * 360
@@ -363,6 +374,7 @@ class HafeleMQTTCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Required by DataUpdateCoordinator
     # ------------------------------------------------------------------
 
-    async def _async_update_data(self) -> dict[str, Any]:  # type: ignore[override]
+    # type: ignore[override]
+    async def _async_update_data(self) -> dict[str, Any]:
         """No-op: this coordinator is push-based (rawMessage + status topic)."""
         return self.data or {}
