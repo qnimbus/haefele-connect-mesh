@@ -13,18 +13,23 @@ services:
       - npm-cache:/home/vscode/.npm
     command: sleep infinity
 
-  mosquitto:
-    image: eclipse-mosquitto:2
-    restart: unless-stopped
-    ports:
-      - "0.0.0.0:1883:1883"
-    volumes:
-      - ../config/mosquitto:/mosquitto/config:ro
-      - mosquitto-data:/mosquitto/data
-      - ../config/mosquitto/log:/mosquitto/log
+  # mosquitto service disabled — HA runs with embedded Mosquitto broker
+  # mosquitto:
+  #   image: eclipse-mosquitto:2
+  #   restart: unless-stopped
+  #   ports:
+  #     - "0.0.0.0:1883:1883"
+  #   volumes:
+  #     - ../config/mosquitto:/mosquitto/config:ro
+  #     - mosquitto-data:/mosquitto/data
+  #     - ../config/mosquitto/log:/mosquitto/log
+  #   entrypoint: >
+  #     sh -c "chown -R mosquitto:mosquitto /mosquitto/log &&
+  #            chmod 0700 /mosquitto/log &&
+  #            exec mosquitto -c /mosquitto/config/mosquitto.conf"
 
 volumes:
-  mosquitto-data:
+  # mosquitto-data:  # not used — HA manages its own Mosquitto broker
   pip-cache:
   pip-local:
   pip-bin:

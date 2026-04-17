@@ -6,17 +6,12 @@
     "postCreateCommand": "scripts/setup",
     "postStartCommand": "scripts/setup-claude",
     "forwardPorts": [
-        8123,
-        1883
+        8123
     ],
     "portsAttributes": {
         "8123": {
             "label": "Home Assistant",
             "onAutoForward": "notify"
-        },
-        "1883": {
-            "label": "MQTT (Mosquitto)",
-            "onAutoForward": "silent"
         }
     },
     "customizations": {
@@ -38,12 +33,9 @@
                 "files.trimTrailingWhitespace": true,
                 "python.analysis.typeCheckingMode": "basic",
                 "python.analysis.autoImportCompletions": true,
-                "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "[python]": {
-                    "editor.defaultFormatter": "charliermarsh.ruff"
-                }
+                "python.defaultInterpreterPath": "/usr/local/bin/python"
             }
-        }
+          }
     },
     "remoteUser": "vscode"
 }
